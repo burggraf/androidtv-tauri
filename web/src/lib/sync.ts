@@ -156,7 +156,7 @@ export interface SyncResult {
 interface ProviderRecord {
   id: string
   name: string
-  base_url: string
+  url: string
   username: string
   password: string
   user: string
@@ -204,7 +204,7 @@ export async function syncProvider(
       throw new Error('You do not have permission to sync this provider.')
     }
 
-    const { base_url: url, username, password } = providerRecord
+    const { url, username, password } = providerRecord
 
     // --- Step 2: Authenticate & enrich ---
     progress('auth', 0.05, 'Authenticating with provider...')

@@ -76,6 +76,20 @@ export function usePlaylists() {
     fetchPlaylists()
   }, [fetchPlaylists])
 
+  useEffect(() => {
+    let unsubscribe: (() => void) | null = null
+    pb.collection('playlists').subscribe<Playlist>('*', (e) => {
+      if (e.action === 'update') {
+        setPlaylists((prev) => prev.map((p) => (p.id === e.record.id ? e.record : p)))
+      } else if (e.action === 'create') {
+        setPlaylists((prev) => [e.record, ...prev.filter((p) => p.id !== e.record.id)])
+      } else if (e.action === 'delete') {
+        setPlaylists((prev) => prev.filter((p) => p.id !== e.record.id))
+      }
+    }).then((unsub) => { unsubscribe = unsub })
+    return () => { unsubscribe?.() }
+  }, [])
+
   const createPlaylist = useCallback(async (data: PlaylistInput) => {
     let metadata = {}
     if (data.type === 'xstream' && data.username && data.password) {
