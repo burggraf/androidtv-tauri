@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
+import { LivePage } from "@/pages/LivePage";
 
 export type Page = "menu" | "movies" | "series" | "live" | "settings";
 
@@ -149,6 +150,7 @@ export function AppContent() {
 
   // Handle Android TV back button (mapped to Escape in WebView)
   useEffect(() => {
+    if (page === "live") return; // LivePage handles its own back
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" || e.key === "Backspace") {
         e.preventDefault();
@@ -157,10 +159,14 @@ export function AppContent() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [goBack]);
+  }, [goBack, page]);
 
   if (page === "menu") {
     return <MenuPage onNavigate={navigate} />;
+  }
+
+  if (page === "live") {
+    return <LivePage onBack={goBack} />;
   }
 
   return <ContentPage page={page} onBack={goBack} />;
