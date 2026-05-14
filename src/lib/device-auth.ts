@@ -24,7 +24,7 @@ export function useDeviceAuth() {
         const records = await pb
           .collection('devices')
           .getFullList<PairedDevice>({
-            filter: `device_id = "${deviceId}"`,
+            filter: `device_id='${deviceId}'`,
             expand: 'user',
           })
         if (!cancelled && records.length > 0) {
@@ -36,8 +36,12 @@ export function useDeviceAuth() {
       if (!cancelled) setLoading(false)
     }
     check()
-    return () => { cancelled = true }
-  }, [])
+
+    const pollId = setInterval(() => {
+      if (!cancelled && !pairedDevice) check()
+    }, 3000)
+    return () => { cancelled = true; clearInterval(pollId) }
+  }, [pairedDevice])
 
   const logout = useCallback(async () => {
     if (!pairedDevice) return
@@ -45,7 +49,7 @@ export function useDeviceAuth() {
       await pb.collection('devices').delete(pairedDevice.id)
       setPairedDevice(null)
     } catch {
-      // best effort
+      // ignore
     }
   }, [pairedDevice])
 

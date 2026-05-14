@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { LivePage } from "@/pages/LivePage";
 import { PairScreen } from "@/pages/PairScreen";
+import { EPGGuide } from "@/pages/EPGGuide";
 import { useDeviceAuth } from "@/lib/device-auth";
 
 export type Page = "menu" | "movies" | "series" | "live" | "settings";
@@ -220,9 +221,7 @@ export function AppContent() {
     return <PairScreen />;
   }
 
-  return (
-    <MainApp pairedDevice={pairedDevice} onLogout={logout} />
-  );
+  return <EPGGuide />;
 }
 
 function MainApp({

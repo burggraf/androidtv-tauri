@@ -19,7 +19,7 @@ function useDevicePairing(deviceId: string) {
       try {
         const records = await pb
           .collection('devices')
-          .getFullList({ filter: `device_id = "${deviceId}" && user != ""`, sort: 'created' })
+          .getFullList({ filter: `device_id = '${deviceId}' && user != ''`, sort: 'created' })
         if (!cancelled && records.length > 0) {
           setIsPaired(true)
         }

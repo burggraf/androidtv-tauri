@@ -11,7 +11,7 @@ function generateUUID(): string {
 
 export function getDeviceId(): string {
   let id = localStorage.getItem(DEVICE_ID_KEY)
-  if (!id) {
+  if (!id || id === '5da8cb74-a335-4ffb-b985-d79764b6f6b6') {
     id = generateUUID()
     localStorage.setItem(DEVICE_ID_KEY, id)
   }
