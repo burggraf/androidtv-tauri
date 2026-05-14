@@ -28,6 +28,155 @@ Key PB 0.38.0 patterns already in use:
 - `pb.authStore.onChange()` for React auth state sync
 - Autodate fields must be explicit in base collections (created/updated)
 
+## PocketBase Data Schema
+
+### Collections Overview
+
+```ts
+users  (built-in PB)            ← One user can own many playlists
+  │                                    playlists.favorites and category_prefs
+  │                                    display_prefs relate to this via `user`
+  ▼
+playlists                    ← Core collection. Each record is one playlist
+  │  (type: "m3u" | "xstream")
+  │  • M3U playlists: url = .m3u8 URL, no xstream fields used
+  │  • Xtream playlists: url = server base URL, username/password used
+  │  • Bulk data (live/vod/series) stored as gzipped JSON in file fields
+  │
+  ├─► favorites              ← Per-user per-playlist favorite streams
+  │     • stream_id + type identify a specific live channel / movie / series
+  │
+  ├─► category_prefs         ← Per-user per-playlist category visibility + ordering
+  │     • Each row = one category's hidden state + sort position
+  │
+  └─► display_prefs          ← Per-user per-playlist display settings (JSON)
+        • view_mode, default_view, parental_pin, etc.
+```
+
+### `playlists` Collection
+
+Owns all playlist data. M3U and Xtream playlists share this collection — the `type` field distinguishes them.
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | text (required) | User-visible name |
+| `url` | url (required) | M3U: .m3u8 URL. Xtream: `http://server:port` |
+| `type` | select `m3u\|xstream` | Distinguishes playlist type |
+| `enabled` | bool (required) | Toggle active/inactive |
+| `user` | relation → users | Owner. cascadeDelete. Rule: `user = @request.auth.id` |
+| `username` | text | Xtream username (null for M3U) |
+| `password` | text | Xtream password (null for M3U) |
+
+**Legacy xstream metadata fields** (populated by old `xstreamEnrich` flow):
+
+| Field | Type | Notes |
+|---|---|---|
+| `expires` | date | Account expiry from xstream auth response |
+| `max_streams` | number | Max concurrent connections |
+| `current_streams` | number | Active connections |
+| `channels` | number | Live channel count |
+| `movies` | number | VOD count |
+| `series` | number | Series count |
+
+**New sync fields** (populated by `syncProvider()` in `web/src/lib/sync.ts`):
+
+| Field | Type | Notes |
+|---|---|---|
+| `live_data` | file (≤10MB) | Gzipped JSON: `{version, fetched_at, categories[], streams[]}` |
+| `vod_data` | file (≤10MB) | Same structure for VOD streams |
+| `series_data` | file (≤10MB) | Same structure for series |
+| `live_version` | text | SHA-256 hash of live data (for sync detection) |
+| `vod_version` | text | SHA-256 hash of VOD data |
+| `series_version` | text | SHA-256 hash of series data |
+| `channels_count` | number | Live count from sync (replaces `channels`) |
+| `movies_count` | number | VOD count from sync (replaces `movies`) |
+| `series_count` | number | Series count from sync (replaces `series`) |
+| `max_connections` | number | Max connections from auth (replaces `max_streams`) |
+| `active_connections` | number | Active connections (replaces `current_streams`) |
+| `allowed_formats` | json | `["m3u8", "ts"]` from auth response |
+| `last_sync_at` | date | Timestamp of last successful sync |
+| `last_sync_status` | select `idle\|syncing\|success\|error` |
+| `last_sync_error` | text | Error message if sync failed |
+
+Rules: `listRule`, `viewRule`, `createRule`, `updateRule`, `deleteRule` all = `user = @request.auth.id`
+Indexes: `idx_playlists_user ON playlists (user)`
+
+### `favorites` Collection
+
+User's favorite streams per playlist.
+
+| Field | Type | Notes |
+|---|---|---|
+| `user` | relation → users | Owner. cascadeDelete |
+| `provider` | relation → playlists | Which playlist this favorite belongs to. cascadeDelete |
+| `stream_id` | text (≤100) | Provider's stream ID (not PB record ID) |
+| `type` | select `live\|vod\|series` | Content type |
+| `name` | text (≤300) | Cached stream name for display |
+| `thumbnail` | text | Cached stream icon/thumbnail URL |
+
+Unique index: `[user, provider, stream_id, type]`
+Rules: all = `user = @request.auth.id`
+
+### `category_prefs` Collection
+
+User's per-playlist category visibility and ordering preferences.
+
+| Field | Type | Notes |
+|---|---|---|
+| `user` | relation → users | Owner. cascadeDelete |
+| `provider` | relation → playlists | Which playlist. cascadeDelete |
+| `type` | select `live\|vod\|series` | Content type |
+| `category_id` | text (≤100) | Provider's category ID |
+| `hidden` | bool | Whether category is hidden from UI |
+| `sort_order` | number | Display order (0 = first) |
+
+Unique index: `[user, provider, type, category_id]`
+Rules: all = `user = @request.auth.id`
+
+### `display_prefs` Collection
+
+User's per-playlist display settings.
+
+| Field | Type | Notes |
+|---|---|---|
+| `user` | relation → users | Owner. cascadeDelete |
+| `provider` | relation → playlists | Which playlist. cascadeDelete |
+| `settings` | json | `{view_mode, default_view, parental_pin, epg_enabled, ...}` |
+
+Unique index: `[user, provider]`
+Rules: all = `user = @request.auth.id`
+
+### Data Flow
+
+```
+Xtream Provider API (residential IP)
+       │
+       ▼ (client-side fetch)
+  xstreamGetAllData() → {live, vod, series} data
+       │
+       ▼ (compress with fflate gzip)
+  playlists.live_data / vod_data / series_data  (file fields)
+  playlists.{live,vod,series}_version           (SHA-256 hashes)
+  playlists.{channels,movies,series}_count      (counts)
+       │
+       ▼ (client downloads via pb.files.getUrl)
+  TV App: src/lib/provider-data.ts
+    • Downloads gzipped files
+    • Decompresses → caches in IndexedDB
+    • Merges with favorites + category_prefs + display_prefs
+```
+
+### Key Modules
+
+| File | Purpose |
+|---|---|
+| `web/src/lib/xstream.ts` | Xtream Codes API client — all fetches run client-side |
+| `web/src/lib/sync.ts` | Sync orchestrator — fetch, compress, upload, version tracking |
+| `web/src/lib/preferences.ts` | Favorites, category_prefs, display_prefs CRUD |
+| `web/src/hooks/usePlaylists.ts` | Playlist CRUD hook with auto-sync on create |
+| `src/lib/pb-client.ts` | TV app PocketBase client |
+| `src/lib/provider-data.ts` | TV app data loader — IndexedDB cache, decompress, merge prefs |
+
 ## Quick Start
 
 ```bash

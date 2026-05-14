@@ -10,6 +10,11 @@
  */
 
 import { gunzipSync } from 'fflate'
+
+/** Escape value for PB filter string interpolation */
+function esc(v: string): string {
+  return v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
 import { pb } from './pb-client'
 import {
   type CategoryPrefRecord,
@@ -78,8 +83,8 @@ export interface ProviderMeta {
 
 const DB_NAME = 'provider-data'
 const DB_VERSION = 1
-const STORE_FILES = 'files' // key: {providerId, type}, value: ProviderDataFile (raw/serialized)
-const STORE_META = 'meta' // key: providerId, value: ProviderMeta
+const STORE_FILES = 'files' // key: {playlistId, type}, value: ProviderDataFile (raw/serialized)
+const STORE_META = 'meta' // key: playlistId, value: ProviderMeta
 
 type FileKey = [string, 'live' | 'vod' | 'series']
 
@@ -92,7 +97,7 @@ function openDB(): Promise<IDBDatabase> {
     request.onupgradeneeded = () => {
       const db = request.result
       if (!db.objectStoreNames.contains(STORE_FILES)) {
-        db.createObjectStore(STORE_FILES, { keyPath: ['providerId', 'type'] })
+        db.createObjectStore(STORE_FILES, { keyPath: ['playlistId', 'type'] })
       }
       if (!db.objectStoreNames.contains(STORE_META)) {
         db.createObjectStore(STORE_META, { keyPath: 'id' })
@@ -104,7 +109,7 @@ function openDB(): Promise<IDBDatabase> {
 }
 
 async function cacheFile(
-  providerId: string,
+  playlistId: string,
   type: 'live' | 'vod' | 'series',
   data: ProviderDataFile,
 ): Promise<void> {
@@ -112,50 +117,50 @@ async function cacheFile(
     const db = await openDB()
     const tx = db.transaction(STORE_FILES, 'readwrite')
     const store = tx.objectStore(STORE_FILES)
-    store.put({ providerId, type, ...data })
+    store.put({ playlistId, type, ...data })
     await new Promise<void>((resolve, reject) => {
       tx.oncomplete = () => resolve()
       tx.onerror = () => reject(tx.error)
     })
   } catch (err) {
-    console.error(`[provider-data] Failed to cache ${type} file for ${providerId}:`, err)
+    console.error(`[provider-data] Failed to cache ${type} file for ${playlistId}:`, err)
   }
 }
 
 async function getCachedFile(
-  providerId: string,
+  playlistId: string,
   type: 'live' | 'vod' | 'series',
 ): Promise<ProviderDataFile | null> {
   try {
     const db = await openDB()
     const tx = db.transaction(STORE_FILES, 'readonly')
     const store = tx.objectStore(STORE_FILES)
-    const request = store.get([providerId, type])
+    const request = store.get([playlistId, type])
     return new Promise((resolve, reject) => {
       request.onsuccess = () => {
         const result = request.result
         if (!result) return resolve(null)
         // Strip IndexedDB key fields, return as ProviderDataFile
-        const { providerId: _pid, type: _t, ...data } = result
+        const { playlistId: _pid, type: _t, ...data } = result
         resolve(data as ProviderDataFile)
       }
       request.onerror = () => reject(request.error)
     })
   } catch (err) {
-    console.error(`[provider-data] Failed to get cached ${type} file for ${providerId}:`, err)
+    console.error(`[provider-data] Failed to get cached ${type} file for ${playlistId}:`, err)
     return null
   }
 }
 
 async function getCachedVersion(
-  providerId: string,
+  playlistId: string,
   type: 'live' | 'vod' | 'series',
 ): Promise<string | null> {
-  const cached = await getCachedFile(providerId, type)
+  const cached = await getCachedFile(playlistId, type)
   return cached?.version ?? null
 }
 
-async function cacheMeta(providerId: string, meta: ProviderMeta): Promise<void> {
+async function cacheMeta(playlistId: string, meta: ProviderMeta): Promise<void> {
   try {
     const db = await openDB()
     const tx = db.transaction(STORE_META, 'readwrite')
@@ -166,22 +171,22 @@ async function cacheMeta(providerId: string, meta: ProviderMeta): Promise<void> 
       tx.onerror = () => reject(tx.error)
     })
   } catch (err) {
-    console.error(`[provider-data] Failed to cache meta for ${providerId}:`, err)
+    console.error(`[provider-data] Failed to cache meta for ${playlistId}:`, err)
   }
 }
 
-export async function getCachedMeta(providerId: string): Promise<ProviderMeta | null> {
+export async function getCachedMeta(playlistId: string): Promise<ProviderMeta | null> {
   try {
     const db = await openDB()
     const tx = db.transaction(STORE_META, 'readonly')
     const store = tx.objectStore(STORE_META)
-    const request = store.get(providerId)
+    const request = store.get(playlistId)
     return new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result ?? null)
       request.onerror = () => reject(request.error)
     })
   } catch (err) {
-    console.error(`[provider-data] Failed to get cached meta for ${providerId}:`, err)
+    console.error(`[provider-data] Failed to get cached meta for ${playlistId}:`, err)
     return null
   }
 }
@@ -202,11 +207,11 @@ export async function getAllCachedMetas(): Promise<ProviderMeta[]> {
   }
 }
 
-export async function clearCache(providerId?: string): Promise<void> {
+export async function clearCache(playlistId?: string): Promise<void> {
   try {
     const db = await openDB()
 
-    if (providerId) {
+    if (playlistId) {
       // Clear specific provider files (compound key cursor iteration)
       const filesTx = db.transaction(STORE_FILES, 'readwrite')
       const filesStore = filesTx.objectStore(STORE_FILES)
@@ -215,7 +220,7 @@ export async function clearCache(providerId?: string): Promise<void> {
         const cursor = req.result
         if (cursor) {
           const [pid] = cursor.key as FileKey
-          if (pid === providerId) cursor.delete()
+          if (pid === playlistId) cursor.delete()
           cursor.continue()
         }
       }
@@ -224,7 +229,7 @@ export async function clearCache(providerId?: string): Promise<void> {
       })
 
       const metaTx = db.transaction(STORE_META, 'readwrite')
-      metaTx.objectStore(STORE_META).delete(providerId)
+      metaTx.objectStore(STORE_META).delete(playlistId)
       await new Promise<void>((resolve) => {
         metaTx.oncomplete = () => resolve()
       })
@@ -294,7 +299,7 @@ function mapToMeta(record: ProviderRecord): ProviderMeta {
 }
 
 export async function fetchProviders(): Promise<ProviderMeta[]> {
-  const records = await pb.collection('providers').getFullList<ProviderRecord>({
+  const records = await pb.collection('playlists').getFullList<ProviderRecord>({
     sort: 'name',
     filter: 'status != "Expired"',
   })
@@ -304,17 +309,17 @@ export async function fetchProviders(): Promise<ProviderMeta[]> {
 // ─── Sync ──────────────────────────────────────────────────────────────────────
 
 export async function syncProviderData(
-  providerId: string,
+  playlistId: string,
   onProgress?: (msg: string) => void,
 ): Promise<{ changed: boolean; types: ('live' | 'vod' | 'series')[] }> {
   const log = (msg: string) => {
-    console.log(`[provider-data] ${providerId}: ${msg}`)
+    console.log(`[provider-data] ${playlistId}: ${msg}`)
     onProgress?.(msg)
   }
 
   // 1. Fetch provider record from PB
   log('Fetching provider metadata...')
-  const record = await pb.collection('providers').getOne<ProviderRecord>(providerId)
+  const record = await pb.collection('playlists').getOne<ProviderRecord>(playlistId)
   const meta = mapToMeta(record)
 
   // 2. Compare versions, download changed types
@@ -334,7 +339,7 @@ export async function syncProviderData(
     }
 
     // Compare with cached version
-    const cachedVersion = await getCachedVersion(providerId, t)
+    const cachedVersion = await getCachedVersion(playlistId, t)
 
     if (cachedVersion === serverVersion) {
       log(`${t}: version unchanged (${serverVersion.substring(0, 8)}...)`)
@@ -360,13 +365,13 @@ export async function syncProviderData(
     const data = await decompressData(blob)
 
     // Cache the data
-    await cacheFile(providerId, t, data)
+    await cacheFile(playlistId, t, data)
     changedTypes.push(t)
     log(`${t}: downloaded ${data.streams.length} streams, ${data.categories.length} categories`)
   }
 
   // 3. Update cached meta
-  await cacheMeta(providerId, meta)
+  await cacheMeta(playlistId, meta)
 
   return {
     changed: changedTypes.length > 0,
@@ -377,11 +382,11 @@ export async function syncProviderData(
 // ─── Data Retrieval ────────────────────────────────────────────────────────────
 
 export async function getCategories(
-  providerId: string,
+  playlistId: string,
   type: 'live' | 'vod' | 'series',
   prefs?: { hiddenCategoryIds?: Set<string>; sortOrder?: Map<string, number> },
 ): Promise<ProviderCategory[]> {
-  const cached = await getCachedFile(providerId, type)
+  const cached = await getCachedFile(playlistId, type)
   if (!cached) return []
 
   let categories = [...cached.categories]
@@ -408,11 +413,11 @@ export async function getCategories(
 }
 
 export async function getStreams(
-  providerId: string,
+  playlistId: string,
   type: 'live' | 'vod' | 'series',
   categoryId?: string,
 ): Promise<ProviderStream[]> {
-  const cached = await getCachedFile(providerId, type)
+  const cached = await getCachedFile(playlistId, type)
   if (!cached) return []
 
   let streams = cached.streams
@@ -427,13 +432,13 @@ export async function getStreams(
 // ─── Favorites ─────────────────────────────────────────────────────────────────
 
 export async function getFavorites(
-  providerId: string,
+  playlistId: string,
   type?: 'live' | 'vod' | 'series',
 ): Promise<Set<string>> {
   const userId = pb.authStore.model?.id
   if (!userId) return new Set()
 
-  const filterParts = [`user = "${userId}"`, `provider = "${providerId}"`]
+  const filterParts = [`user = "${userId}"`, `playlist = "${playlistId}"`]
   if (type) filterParts.push(`type = "${type}"`)
 
   const records = await pb
@@ -444,7 +449,7 @@ export async function getFavorites(
 }
 
 export async function isFavorite(
-  providerId: string,
+  playlistId: string,
   streamId: string,
   type: 'live' | 'vod' | 'series',
 ): Promise<boolean> {
@@ -452,13 +457,13 @@ export async function isFavorite(
   if (!userId) return false
 
   const result = await pb.collection('favorites').getList<FavoriteRecord>(1, 1, {
-    filter: `user = "${userId}" && provider = "${providerId}" && stream_id = "${streamId}" && type = "${type}"`,
+    filter: `user = "${userId}" && playlist = "${playlistId}" && stream_id = "${streamId}" && type = "${type}"`,
   })
   return result.items.length > 0
 }
 
 export async function toggleFavorite(
-  providerId: string,
+  playlistId: string,
   streamId: string,
   type: 'live' | 'vod' | 'series',
   streamName?: string,
@@ -471,7 +476,7 @@ export async function toggleFavorite(
   const existing = await pb
     .collection('favorites')
     .getFullList<FavoriteRecord>({
-      filter: `user = "${userId}" && provider = "${providerId}" && stream_id = "${streamId}" && type = "${type}"`,
+      filter: `user = "${userId}" && playlist = "${playlistId}" && stream_id = "${streamId}" && type = "${type}"`,
     })
 
   if (existing.length > 0) {
@@ -483,7 +488,7 @@ export async function toggleFavorite(
     // Add
     await pb.collection('favorites').create<FavoriteRecord>({
       user: userId,
-      provider: providerId,
+      playlist: playlistId,
       stream_id: streamId,
       type,
       name: streamName,
@@ -494,12 +499,12 @@ export async function toggleFavorite(
 
 // ─── Display Prefs ─────────────────────────────────────────────────────────────
 
-export async function getDisplayPrefs(providerId: string): Promise<Record<string, unknown>> {
+export async function getDisplayPrefs(playlistId: string): Promise<Record<string, unknown>> {
   const userId = pb.authStore.model?.id
   if (!userId) return {}
 
   const result = await pb.collection('display_prefs').getList<DisplayPrefRecord>(1, 1, {
-    filter: `user = "${userId}" && provider = "${providerId}"`,
+    filter: `user = "${userId}" && playlist = "${playlistId}"`,
   })
 
   if (result.items.length === 0) return {}
@@ -509,14 +514,14 @@ export async function getDisplayPrefs(providerId: string): Promise<Record<string
 // ─── Category Prefs ────────────────────────────────────────────────────────────
 
 export async function getCategoryPrefs(
-  providerId: string,
+  playlistId: string,
   type: 'live' | 'vod' | 'series',
 ): Promise<CategoryPrefRecord[]> {
   const userId = pb.authStore.model?.id
   if (!userId) return []
 
   const result = await pb.collection('category_prefs').getFullList<CategoryPrefRecord>({
-    filter: `user = "${userId}" && provider = "${providerId}" && type = "${type}"`,
+    filter: `user = "${userId}" && playlist = "${playlistId}" && type = "${type}"`,
   })
 
   return result
@@ -524,10 +529,10 @@ export async function getCategoryPrefs(
 
 // Helper: build hidden category set and sort order map from prefs
 export async function buildCategoryPrefs(
-  providerId: string,
+  playlistId: string,
   type: 'live' | 'vod' | 'series',
 ): Promise<{ hiddenCategoryIds: Set<string>; sortOrder: Map<string, number> }> {
-  const prefs = await getCategoryPrefs(providerId, type)
+  const prefs = await getCategoryPrefs(playlistId, type)
 
   const hiddenCategoryIds = new Set<string>()
   const sortOrder = new Map<string, number>()
@@ -543,7 +548,7 @@ export async function buildCategoryPrefs(
 // ─── Full Startup Sync ─────────────────────────────────────────────────────────
 
 export async function syncAllProviders(
-  onProviderProgress?: (providerId: string, msg: string) => void,
+  onProviderProgress?: (playlistId: string, msg: string) => void,
 ): Promise<void> {
   const providers = await fetchProviders()
 

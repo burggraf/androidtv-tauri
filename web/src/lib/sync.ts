@@ -17,7 +17,7 @@ import {
   cleanupOrphanedCategoryPrefs,
 } from './preferences'
 import {
-  xstreamAuthenticate,
+  xstreamEnrich,
   xstreamGetAllData,
   type XstreamCategory,
   type XstreamFetchProgress,
@@ -51,11 +51,19 @@ export async function computeVersionHash(
   categories: Pick<XstreamCategory, 'category_id' | 'category_name'>[],
   streams: { stream_id?: number; series_id?: number; name?: string; category_id?: string }[],
 ): Promise<string> {
-  const catFingerprint = categories
+  // Sort for order-independent hashing (provider API may return data in different orders)
+  const sortedCats = [...categories].sort((a, b) => String(a.category_id).localeCompare(String(b.category_id)))
+  const sortedStreams = [...streams].sort((a, b) => {
+    const aid = a.stream_id ?? a.series_id ?? 0
+    const bid = b.stream_id ?? b.series_id ?? 0
+    return aid - bid
+  })
+
+  const catFingerprint = sortedCats
     .map((c) => `${c.category_id}:${c.category_name}`)
     .join('|')
 
-  const streamFingerprint = streams
+  const streamFingerprint = sortedStreams
     .map((s) => `${s.stream_id ?? s.series_id}:${s.name ?? ''}:${s.category_id ?? ''}`)
     .join('|')
 
@@ -84,7 +92,7 @@ export interface PackagedData {
 }
 
 export async function packageData(
-  _type: 'live' | 'vod' | 'series',
+  type: 'live' | 'vod' | 'series',
   categories: XstreamCategory[],
   streams: XstreamLiveStream[] | XstreamVodStream[] | XstreamSeriesStream[],
 ): Promise<PackagedData> {
@@ -93,6 +101,7 @@ export async function packageData(
   const payload = {
     version,
     fetched_at: new Date().toISOString(),
+    type,
     categories,
     streams,
   }
@@ -130,7 +139,7 @@ export interface SyncProgress {
 
 export interface SyncResult {
   success: boolean
-  providerId: string
+  playlistId: string
   liveChanged: boolean
   vodChanged: boolean
   seriesChanged: boolean
@@ -150,7 +159,7 @@ interface ProviderRecord {
   base_url: string
   username: string
   password: string
-  owner: string
+  user: string
   live_data?: string
   vod_data?: string
   series_data?: string
@@ -170,7 +179,7 @@ interface ProviderRecord {
 // ---------------------------------------------------------------------------
 
 export async function syncProvider(
-  providerId: string,
+  playlistId: string,
   onProgress?: (progress: SyncProgress) => void,
 ): Promise<SyncResult> {
   const progress = (
@@ -182,24 +191,27 @@ export async function syncProvider(
   }
 
   try {
-    // --- Step 1: Fetch provider record ---
+    // --- Step 1: Verify ownership then fetch provider record ---
     progress('auth', 0.02, 'Loading provider record...')
 
-    const providerRecord = await pb.collection('providers').getOne<ProviderRecord>(providerId)
-
-    // Verify ownership
     const currentUserId = pb.authStore.model?.id
-    if (!currentUserId || providerRecord.owner !== currentUserId) {
+    if (!currentUserId) {
+      throw new Error('You must be logged in to sync providers.')
+    }
+
+    const providerRecord = await pb.collection('playlists').getOne<ProviderRecord>(playlistId)
+    if (providerRecord.user !== currentUserId) {
       throw new Error('You do not have permission to sync this provider.')
     }
 
     const { base_url: url, username, password } = providerRecord
 
-    // --- Step 2: Authenticate ---
+    // --- Step 2: Authenticate & enrich ---
     progress('auth', 0.05, 'Authenticating with provider...')
 
+    let enrichment: Awaited<ReturnType<typeof xstreamEnrich>>
     try {
-      await xstreamAuthenticate(url, username, password)
+      enrichment = await xstreamEnrich(url, username, password)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       progress('error', 0, 'Authentication failed', message)
@@ -296,7 +308,7 @@ export async function syncProvider(
       progress('done', 1, 'No changes detected. Provider data is up to date.')
       return {
         success: true,
-        providerId,
+        playlistId,
         liveChanged: false,
         vodChanged: false,
         seriesChanged: false,
@@ -324,7 +336,7 @@ export async function syncProvider(
       try {
         const form = new FormData()
         form.append(fieldName, packaged[t]!.blob, fileName)
-        await pb.collection('providers').update(providerId, form)
+        await pb.collection('playlists').update(playlistId, form)
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
         progress('error', 0, `Upload failed for ${t}`, message)
@@ -335,11 +347,15 @@ export async function syncProvider(
     // --- Step 6: Update metadata ---
     progress('updating_metadata', 0.95, 'Updating metadata...')
 
-    // Build update with new version hashes and counts
+    // Build update with enrichment metadata, version hashes, and counts
     const metadataUpdate: Record<string, unknown> = {
       last_sync_at: new Date().toISOString(),
       last_sync_status: 'success',
       last_sync_error: null,
+      expires: enrichment.expires,
+      max_connections: enrichment.max_streams,
+      active_connections: enrichment.current_streams,
+      status: enrichment.channels != null ? 'Active' : 'Unknown',
     }
 
     if (liveChanged && packaged.live) {
@@ -355,20 +371,28 @@ export async function syncProvider(
       metadataUpdate.series_count = packaged.series.count
     }
 
-    try {
-      const metaForm = new FormData()
-      for (const [key, value] of Object.entries(metadataUpdate)) {
-        if (value !== null) {
-          metaForm.append(key, String(value))
+    let metadataRetries = 2
+    while (metadataRetries > 0) {
+      try {
+        const metaForm = new FormData()
+        for (const [key, value] of Object.entries(metadataUpdate)) {
+          if (value !== null) {
+            metaForm.append(key, String(value))
+          } else {
+            metaForm.append(key, '')
+          }
+        }
+        await pb.collection('playlists').update(playlistId, metaForm)
+        break
+      } catch (err) {
+        metadataRetries--
+        if (metadataRetries === 0) {
+          const message = err instanceof Error ? err.message : String(err)
+          console.error('[sync] Metadata update failed after retries, data uploaded but versions stale:', message)
         } else {
-          metaForm.append(key, '')
+          await new Promise((r) => setTimeout(r, 1000))
         }
       }
-      await pb.collection('providers').update(providerId, metaForm)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      // Non-fatal: files already uploaded, metadata update failed
-      console.error('[sync] Metadata update failed, but data files uploaded:', message)
     }
 
     // --- Step 7: Cleanup orphaned category_prefs ---
@@ -379,7 +403,7 @@ export async function syncProvider(
 
       const validIds = new Set(fetchedData[t].categories.map((c) => c.category_id))
       try {
-        const cleaned = await cleanupOrphanedCategoryPrefs(providerId, validIds, t)
+        const cleaned = await cleanupOrphanedCategoryPrefs(playlistId, validIds, t)
         if (cleaned > 0) {
           console.log(`[sync] Removed ${cleaned} orphaned category_prefs for ${t}`)
         }
@@ -393,7 +417,7 @@ export async function syncProvider(
 
     return {
       success: true,
-      providerId,
+      playlistId,
       liveChanged,
       vodChanged,
       seriesChanged,
@@ -407,7 +431,7 @@ export async function syncProvider(
 
     // Mark error status on provider
     try {
-      await pb.collection('providers').update(providerId, {
+      await pb.collection('playlists').update(playlistId, {
         last_sync_status: 'error',
         last_sync_error: message,
         last_sync_at: new Date().toISOString(),
@@ -418,7 +442,7 @@ export async function syncProvider(
 
     return {
       success: false,
-      providerId,
+      playlistId,
       liveChanged: false,
       vodChanged: false,
       seriesChanged: false,
@@ -434,7 +458,7 @@ export async function syncProvider(
 // Utility Functions
 // ---------------------------------------------------------------------------
 
-export async function getProviderSyncStatus(providerId: string): Promise<{
+export async function getProviderSyncStatus(playlistId: string): Promise<{
   lastSyncAt: string | null
   status: string
   error: string | null
@@ -442,14 +466,14 @@ export async function getProviderSyncStatus(providerId: string): Promise<{
   vodVersion: string | null
   seriesVersion: string | null
 }> {
-  const record = await pb.collection('providers').getOne<{
+  const record = await pb.collection('playlists').getOne<{
     last_sync_at?: string
     last_sync_status?: string
     last_sync_error?: string
     live_version?: string
     vod_version?: string
     series_version?: string
-  }>(providerId)
+  }>(playlistId)
 
   return {
     lastSyncAt: record.last_sync_at ?? null,
@@ -464,12 +488,12 @@ export async function getProviderSyncStatus(providerId: string): Promise<{
 const DEFAULT_SYNC_THRESHOLD_MS = 6 * 60 * 60 * 1000 // 6 hours
 
 export async function needsSync(
-  providerId: string,
+  playlistId: string,
   lastSyncThresholdMs: number = DEFAULT_SYNC_THRESHOLD_MS,
 ): Promise<boolean> {
-  const record = await pb.collection('providers').getOne<{
+  const record = await pb.collection('playlists').getOne<{
     last_sync_at?: string
-  }>(providerId)
+  }>(playlistId)
 
   if (!record.last_sync_at) return true
 

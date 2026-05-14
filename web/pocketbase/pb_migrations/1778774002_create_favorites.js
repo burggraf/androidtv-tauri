@@ -1,6 +1,6 @@
 migrate((app) => {
   const usersCollection = app.findCollectionByNameOrId("users");
-  const providersCollection = app.findCollectionByNameOrId("providers");
+  const playlistsCollection = app.findCollectionByNameOrId("playlists");
 
   const collection = new Collection({
     type: "base",
@@ -20,11 +20,11 @@ migrate((app) => {
         cascadeDelete: true,
       },
       {
-        name: "provider",
+        name: "playlist",
         type: "relation",
         required: true,
         maxSelect: 1,
-        collectionId: providersCollection.id,
+        collectionId: playlistsCollection.id,
         cascadeDelete: true,
       },
       {
@@ -57,8 +57,8 @@ migrate((app) => {
     ],
     indexes: [
       "CREATE INDEX idx_favorites_user ON favorites (user)",
-      "CREATE INDEX idx_favorites_provider ON favorites (provider)",
-      "CREATE UNIQUE INDEX idx_favorites_unique ON favorites (user, provider, stream_id, type)",
+      "CREATE INDEX idx_favorites_playlist ON favorites (playlist)",
+      "CREATE UNIQUE INDEX idx_favorites_unique ON favorites (user, playlist, stream_id, type)",
     ],
   });
 

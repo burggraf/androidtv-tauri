@@ -6,6 +6,9 @@
 
 function normalizeBaseUrl(rawUrl: string): string {
   let url = rawUrl.trim().replace(/\/+$/, '')
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = 'https://' + url
+  }
   const protoEnd = url.indexOf('://')
   if (protoEnd === -1) return url
   const hostStart = protoEnd + 3
@@ -14,6 +17,17 @@ function normalizeBaseUrl(rawUrl: string): string {
     url = url.substring(0, slashIdx)
   }
   return url
+}
+
+/** fetch with timeout (default 30s) */
+async function fetchWithTimeout(url: string, init?: RequestInit, timeoutMs = 30_000): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...init, signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 export interface XstreamUserInfo {
@@ -64,7 +78,7 @@ export async function xstreamAuthenticate(
 
   let res: Response
   try {
-    res = await fetch(apiUrl)
+    res = await fetchWithTimeout(apiUrl)
   } catch {
     throw new Error('Cannot reach Xtream Codes server. Check the URL and try again.')
   }
@@ -100,7 +114,7 @@ async function xstreamCount(
   const apiUrl = `${baseUrl}/player_api.php?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&action=${action}`
 
   try {
-    const res = await fetch(apiUrl)
+    const res = await fetchWithTimeout(apiUrl)
     if (res.status !== 200) return null
     const json: unknown = await res.json()
     if (Array.isArray(json)) return json.length
@@ -229,7 +243,7 @@ export class RateLimitedFetcher {
   async fetch(url: string, init?: RequestInit): Promise<Response> {
     await this.acquire()
     try {
-      return await fetch(url, init)
+      return await fetchWithTimeout(url, init)
     } finally {
       this.release()
     }
@@ -268,7 +282,7 @@ async function xstreamFetchArray(
   const search = new URLSearchParams({ username, password, action, ...params })
   const apiUrl = `${baseUrl}/player_api.php?${search.toString()}`
 
-  const res = await fetch(apiUrl)
+  const res = await fetchWithTimeout(apiUrl)
   if (!res.ok) {
     throw new Error(`HTTP ${res.status} fetching ${action}`)
   }

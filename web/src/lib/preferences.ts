@@ -7,7 +7,7 @@ import { pb } from './pocketbase'
 export interface FavoriteRecord {
   id: string
   user: string
-  provider: string
+  playlist: string
   stream_id: string
   type: 'live' | 'vod' | 'series'
   name?: string
@@ -19,7 +19,7 @@ export interface FavoriteRecord {
 export interface CategoryPrefRecord {
   id: string
   user: string
-  provider: string
+  playlist: string
   type: 'live' | 'vod' | 'series'
   category_id: string
   hidden: boolean
@@ -41,7 +41,7 @@ export interface DisplaySettings {
 export interface DisplayPrefRecord {
   id: string
   user: string
-  provider: string
+  playlist: string
   settings: DisplaySettings
   created: string
   updated: string
@@ -57,12 +57,17 @@ function currentUserId(): string {
   return uid
 }
 
+/** Escape value for PB filter string interpolation (prevents filter injection) */
+function esc(v: string): string {
+  return v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
 // ---------------------------------------------------------------------------
 // Favorites
 // ---------------------------------------------------------------------------
 
 export async function addFavorite(
-  providerId: string,
+  playlistId: string,
   streamId: string,
   type: 'live' | 'vod' | 'series',
   name?: string,
@@ -70,20 +75,24 @@ export async function addFavorite(
 ): Promise<FavoriteRecord> {
   const userId = currentUserId()
 
-  // Check uniqueness via existing record
-  const existing = await pb.collection('favorites').getFullList<FavoriteRecord>({
-    filter: `user = "${userId}" && provider = "${providerId}" && stream_id = "${streamId}" && type = "${type}"`,
-  })
-  if (existing.length > 0) return existing[0]
-
-  return pb.collection('favorites').create<FavoriteRecord>({
-    user: userId,
-    provider: providerId,
-    stream_id: streamId,
-    type,
-    name,
-    thumbnail,
-  })
+  // Optimistic create — race condition handled via unique index catch
+  try {
+    return await pb.collection('favorites').create<FavoriteRecord>({
+      user: userId,
+      playlist: playlistId,
+      stream_id: streamId,
+      type,
+      name,
+      thumbnail,
+    })
+  } catch (err) {
+    // Unique constraint violation — return existing record
+    const existing = await pb.collection('favorites').getList<FavoriteRecord>(1, 1, {
+      filter: `user = "${userId}" && playlist = "${playlistId}" && stream_id = "${esc(streamId)}" && type = "${type}"`,
+    })
+    if (existing.items.length > 0) return existing.items[0]
+    throw err
+  }
 }
 
 export async function removeFavorite(favoriteId: string): Promise<void> {
@@ -91,14 +100,14 @@ export async function removeFavorite(favoriteId: string): Promise<void> {
 }
 
 export async function removeFavoriteByStream(
-  providerId: string,
+  playlistId: string,
   streamId: string,
   type: 'live' | 'vod' | 'series',
 ): Promise<void> {
   const userId = currentUserId()
 
   const existing = await pb.collection('favorites').getFullList<FavoriteRecord>({
-    filter: `user = "${userId}" && provider = "${providerId}" && stream_id = "${streamId}" && type = "${type}"`,
+    filter: `user = "${userId}" && playlist = "${playlistId}" && stream_id = "${esc(streamId)}" && type = "${type}"`,
   })
   for (const fav of existing) {
     await pb.collection('favorites').delete(fav.id)
@@ -106,31 +115,31 @@ export async function removeFavoriteByStream(
 }
 
 export async function getFavorites(
-  providerId?: string,
+  playlistId?: string,
   type?: 'live' | 'vod' | 'series',
 ): Promise<FavoriteRecord[]> {
   const userId = currentUserId()
 
   const filterParts = [`user = "${userId}"`]
-  if (providerId) filterParts.push(`provider = "${providerId}"`)
+  if (playlistId) filterParts.push(`playlist = "${playlistId}"`)
   if (type) filterParts.push(`type = "${type}"`)
 
   return pb.collection('favorites').getFullList<FavoriteRecord>({
     filter: filterParts.join(' && '),
-    expand: 'provider',
+    expand: 'playlist',
     sort: '-created',
   })
 }
 
 export async function isFavorite(
-  providerId: string,
+  playlistId: string,
   streamId: string,
   type: 'live' | 'vod' | 'series',
 ): Promise<boolean> {
   const userId = currentUserId()
 
   const result = await pb.collection('favorites').getList<FavoriteRecord>(1, 1, {
-    filter: `user = "${userId}" && provider = "${providerId}" && stream_id = "${streamId}" && type = "${type}"`,
+    filter: `user = "${userId}" && playlist = "${playlistId}" && stream_id = "${esc(streamId)}" && type = "${type}"`,
   })
   return result.totalItems > 0
 }
@@ -140,7 +149,7 @@ export async function isFavorite(
 // ---------------------------------------------------------------------------
 
 export async function setCategoryHidden(
-  providerId: string,
+  playlistId: string,
   type: 'live' | 'vod' | 'series',
   categoryId: string,
   hidden: boolean,
@@ -148,7 +157,7 @@ export async function setCategoryHidden(
   const userId = currentUserId()
 
   const existing = await pb.collection('category_prefs').getFullList<CategoryPrefRecord>({
-    filter: `user = "${userId}" && provider = "${providerId}" && type = "${type}" && category_id = "${categoryId}"`,
+    filter: `user = "${userId}" && playlist = "${playlistId}" && type = "${type}" && category_id = "${esc(categoryId)}"`,
   })
 
   if (existing.length > 0) {
@@ -159,7 +168,7 @@ export async function setCategoryHidden(
 
   return pb.collection('category_prefs').create<CategoryPrefRecord>({
     user: userId,
-    provider: providerId,
+    playlist: playlistId,
     type,
     category_id: categoryId,
     hidden,
@@ -168,22 +177,22 @@ export async function setCategoryHidden(
 }
 
 export async function toggleCategoryHidden(
-  providerId: string,
+  playlistId: string,
   type: 'live' | 'vod' | 'series',
   categoryId: string,
 ): Promise<CategoryPrefRecord> {
-  const prefs = await getCategoryPrefs(providerId, type)
+  const prefs = await getCategoryPrefs(playlistId, type)
   const existing = prefs.find((p) => p.category_id === categoryId)
 
-  return setCategoryHidden(providerId, type, categoryId, !existing?.hidden)
+  return setCategoryHidden(playlistId, type, categoryId, !existing?.hidden)
 }
 
 export async function reorderCategories(
-  providerId: string,
+  playlistId: string,
   type: 'live' | 'vod' | 'series',
   orderedCategoryIds: string[],
 ): Promise<CategoryPrefRecord[]> {
-  const allPrefs = await getCategoryPrefs(providerId, type)
+  const allPrefs = await getCategoryPrefs(playlistId, type)
   const orderedSet = new Set(orderedCategoryIds)
 
   // Categories not in ordered list — append at end preserving relative order
@@ -201,7 +210,7 @@ export async function reorderCategories(
     }
     return pb.collection('category_prefs').create<CategoryPrefRecord>({
       user: currentUserId(),
-      provider: providerId,
+      playlist: playlistId,
       type,
       category_id: categoryId,
       hidden: false,
@@ -213,17 +222,17 @@ export async function reorderCategories(
 }
 
 export async function getCategoryPrefs(
-  providerId: string,
+  playlistId: string,
   type?: 'live' | 'vod' | 'series',
 ): Promise<CategoryPrefRecord[]> {
   const userId = currentUserId()
 
-  const filterParts = [`user = "${userId}"`, `provider = "${providerId}"`]
+  const filterParts = [`user = "${userId}"`, `playlist = "${playlistId}"`]
   if (type) filterParts.push(`type = "${type}"`)
 
   return pb.collection('category_prefs').getFullList<CategoryPrefRecord>({
     filter: filterParts.join(' && '),
-    expand: 'provider',
+    expand: 'playlist',
     sort: 'sort_order, created',
   })
 }
@@ -233,24 +242,24 @@ export async function getCategoryPrefs(
 // ---------------------------------------------------------------------------
 
 export async function getDisplayPrefs(
-  providerId: string,
+  playlistId: string,
 ): Promise<DisplayPrefRecord | null> {
   const userId = currentUserId()
 
   const result = await pb.collection('display_prefs').getList<DisplayPrefRecord>(1, 1, {
-    filter: `user = "${userId}" && provider = "${providerId}"`,
-    expand: 'provider',
+    filter: `user = "${userId}" && playlist = "${playlistId}"`,
+    expand: 'playlist',
   })
   return result.items[0] ?? null
 }
 
 export async function updateDisplayPrefs(
-  providerId: string,
+  playlistId: string,
   settings: Partial<DisplaySettings>,
 ): Promise<DisplayPrefRecord> {
   const userId = currentUserId()
 
-  const existing = await getDisplayPrefs(providerId)
+  const existing = await getDisplayPrefs(playlistId)
   if (existing) {
     const merged: DisplaySettings = { ...(existing.settings ?? {}), ...settings }
     return pb.collection('display_prefs').update<DisplayPrefRecord>(existing.id, {
@@ -260,7 +269,7 @@ export async function updateDisplayPrefs(
 
   return pb.collection('display_prefs').create<DisplayPrefRecord>({
     user: userId,
-    provider: providerId,
+    playlist: playlistId,
     settings,
   })
 }
@@ -270,11 +279,11 @@ export async function updateDisplayPrefs(
 // ---------------------------------------------------------------------------
 
 export async function cleanupOrphanedCategoryPrefs(
-  providerId: string,
+  playlistId: string,
   validCategoryIds: Set<string>,
   type: 'live' | 'vod' | 'series',
 ): Promise<number> {
-  const allPrefs = await getCategoryPrefs(providerId, type)
+  const allPrefs = await getCategoryPrefs(playlistId, type)
 
   const orphaned = allPrefs.filter((p) => !validCategoryIds.has(p.category_id))
 

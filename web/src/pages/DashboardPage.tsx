@@ -1,26 +1,22 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { usePlaylists, type PlaylistInput } from '@/hooks/usePlaylists'
-import { useProviders, type ProviderInput } from '@/hooks/useProviders'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import PlaylistCard from '@/components/PlaylistCard'
 import PlaylistForm from '@/components/PlaylistForm'
-import ProviderCard from '@/components/ProviderCard'
-import ProviderForm from '@/components/ProviderForm'
-import { Plus, LogOut, List, Server, type LucideIcon } from 'lucide-react'
+import { Plus, LogOut, List, type LucideIcon } from 'lucide-react'
 
 export default function DashboardPage() {
   const { user, logout } = useAuth()
-  const { playlists, loading: playlistsLoading, error: playlistsError, createPlaylist, updatePlaylist, deletePlaylist } = usePlaylists()
-  const { providers, loading: providersLoading, error: providersError, createProvider, updateProvider, deleteProvider } = useProviders()
+  const { playlists, loading, error, createPlaylist, updatePlaylist, deletePlaylist } = usePlaylists()
 
-  const [activeTab, setActiveTab] = useState<'playlists' | 'providers'>('playlists')
+  const [activeTab, setActiveTab] = useState<'m3u' | 'xstream'>('m3u')
   const [creating, setCreating] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
-  const handleCreatePlaylist = async (data: PlaylistInput) => {
+  const handleCreate = async (data: PlaylistInput) => {
     try {
       setSubmitError(null)
       await createPlaylist(data)
@@ -30,20 +26,15 @@ export default function DashboardPage() {
     }
   }
 
-  const handleCreateProvider = async (data: ProviderFormData) => {
-    try {
-      setSubmitError(null)
-      await createProvider(data)
-      setCreating(false)
-    } catch (err: unknown) {
-      setSubmitError(err instanceof Error ? err.message : 'Failed to create provider')
-    }
-  }
-
-  const tabs: { key: 'playlists' | 'providers'; label: string; icon: LucideIcon }[] = [
-    { key: 'playlists', label: 'Playlists', icon: List },
-    { key: 'providers', label: 'Providers', icon: Server },
+  const tabs: { key: 'm3u' | 'xstream'; label: string; icon: LucideIcon }[] = [
+    { key: 'm3u', label: 'M3U', icon: List },
+    { key: 'xstream', label: 'Xtream', icon: List },
   ]
+
+  const filtered = useMemo(
+    () => playlists.filter((p) => p.type === activeTab),
+    [playlists, activeTab],
+  )
 
   return (
     <div className="min-h-screen bg-zinc-950">
@@ -66,7 +57,7 @@ export default function DashboardPage() {
 
       {/* Main Content */}
       <main className="mx-auto max-w-5xl px-4 py-8">
-        {/* Tab toggle */}
+        {/* Tab toggle + Add button */}
         <div className="mb-6 flex items-center justify-between">
           <div className="flex gap-2">
             {tabs.map(({ key, label, icon: Icon }) => (
@@ -82,48 +73,31 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          {activeTab === 'playlists' && (
-            <Dialog open={creating} onOpenChange={setCreating}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Playlist
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Add New Playlist</DialogTitle>
-                </DialogHeader>
-                <PlaylistForm onSubmit={handleCreatePlaylist} onCancel={() => setCreating(false)} />
-              </DialogContent>
-            </Dialog>
-          )}
-
-          {activeTab === 'providers' && (
-            <Dialog open={creating} onOpenChange={setCreating}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Provider
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Add New Provider</DialogTitle>
-                </DialogHeader>
-                <ProviderForm onSubmit={handleCreateProvider} onCancel={() => setCreating(false)} />
-              </DialogContent>
-            </Dialog>
-          )}
+          <Dialog open={creating} onOpenChange={setCreating}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Playlist
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Playlist</DialogTitle>
+              </DialogHeader>
+              <PlaylistForm
+                onSubmit={handleCreate}
+                onCancel={() => setCreating(false)}
+                defaultType={activeTab}
+              />
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Errors */}
-        {(submitError || (activeTab === 'playlists' && playlistsError) || (activeTab === 'providers' && providersError)) && (
+        {(submitError || error) && (
           <Card className="mb-6 border-destructive">
             <CardContent className="pt-6">
-              <p className="text-sm text-destructive">
-                {submitError || playlistsError || providersError}
-              </p>
+              <p className="text-sm text-destructive">{submitError || error}</p>
               {submitError && (
                 <button className="text-xs text-muted-foreground underline mt-1" onClick={() => setSubmitError(null)}>Dismiss</button>
               )}
@@ -131,106 +105,54 @@ export default function DashboardPage() {
           </Card>
         )}
 
-        {/* Playlists Tab */}
-        {activeTab === 'playlists' && (
-          playlistsLoading ? (
-            <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <Card key={i} className="animate-pulse">
-                  <CardContent className="pt-6">
-                    <div className="space-y-2">
-                      <div className="h-6 w-40 rounded bg-zinc-800" />
-                      <div className="h-4 w-64 rounded bg-zinc-800" />
-                      <div className="h-4 w-24 rounded bg-zinc-800" />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : playlists.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-                <List className="mb-4 h-12 w-12 text-zinc-700" />
-                <h3 className="mb-2 text-lg font-medium">No playlists yet</h3>
-                <p className="mb-4 text-sm text-muted-foreground">
-                  Add your first M3U or Xtream Codes playlist to get started.
-                </p>
-                <Button onClick={() => setCreating(true)}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Playlist
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {playlists.map((playlist) => (
-                <PlaylistCard
-                  key={playlist.id}
-                  playlist={playlist}
-                  onUpdate={async (id, data) => {
-                    try {
-                      setSubmitError(null)
-                      await updatePlaylist(id, data)
-                    } catch (err: unknown) {
-                      setSubmitError(err instanceof Error ? err.message : 'Failed to update playlist')
-                    }
-                  }}
-                  onDelete={deletePlaylist}
-                />
-              ))}
-            </div>
-          )
-        )}
-
-        {/* Providers Tab */}
-        {activeTab === 'providers' && (
-          providersLoading ? (
-            <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <Card key={i} className="animate-pulse">
-                  <CardContent className="pt-6">
-                    <div className="space-y-2">
-                      <div className="h-6 w-40 rounded bg-zinc-800" />
-                      <div className="h-4 w-64 rounded bg-zinc-800" />
-                      <div className="h-4 w-24 rounded bg-zinc-800" />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : providers.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-                <Server className="mb-4 h-12 w-12 text-zinc-700" />
-                <h3 className="mb-2 text-lg font-medium">No providers yet</h3>
-                <p className="mb-4 text-sm text-muted-foreground">
-                  Add your first Xtream Codes provider to get started.
-                </p>
-                <Button onClick={() => setCreating(true)}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Provider
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {providers.map((provider) => (
-                <ProviderCard
-                  key={provider.id}
-                  provider={provider}
-                  onUpdate={async (id, data) => {
-                    try {
-                      setSubmitError(null)
-                      await updateProvider(id, data)
-                    } catch (err: unknown) {
-                      setSubmitError(err instanceof Error ? err.message : 'Failed to update provider')
-                    }
-                  }}
-                  onDelete={deleteProvider}
-                />
-              ))}
-            </div>
-          )
+        {/* Content */}
+        {loading ? (
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <Card key={i} className="animate-pulse">
+                <CardContent className="pt-6">
+                  <div className="space-y-2">
+                    <div className="h-6 w-40 rounded bg-zinc-800" />
+                    <div className="h-4 w-64 rounded bg-zinc-800" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+              <List className="mb-4 h-12 w-12 text-zinc-700" />
+              <h3 className="mb-2 text-lg font-medium">
+                No {activeTab === 'm3u' ? 'M3U' : 'Xtream'} playlists yet
+              </h3>
+              <p className="mb-4 text-sm text-muted-foreground">
+                Add your first {activeTab === 'm3u' ? 'M3U' : 'Xtream Codes'} playlist to get started.
+              </p>
+              <Button onClick={() => setCreating(true)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Playlist
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            {filtered.map((playlist) => (
+              <PlaylistCard
+                key={playlist.id}
+                playlist={playlist}
+                onUpdate={async (id, data) => {
+                  try {
+                    setSubmitError(null)
+                    await updatePlaylist(id, data)
+                  } catch (err: unknown) {
+                    setSubmitError(err instanceof Error ? err.message : 'Failed to update playlist')
+                  }
+                }}
+                onDelete={deletePlaylist}
+              />
+            ))}
+          </div>
         )}
       </main>
     </div>
