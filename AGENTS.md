@@ -3,12 +3,30 @@
 ## Project Overview
 
 Tauri v2 + React 19 + TypeScript + Tailwind CSS v4 + shadcn/ui → **Android TV**
+Web portal: React 19 + Vite + Tailwind CSS v3 + shadcn/ui + PocketBase 0.38.0
 
-- **Frontend:** React 19, TypeScript, Tailwind CSS v4, shadcn/ui
+- **Frontend (TV):** React 19, TypeScript, Tailwind CSS v4, shadcn/ui
+- **Frontend (Web):** React 19, TypeScript, Tailwind CSS v3, shadcn/ui
+- **Backend (Web):** PocketBase 0.38.0 (embedded SQLite, JS migrations)
 - **Runtime:** Tauri v2 (Rust)
 - **Target:** Android TV (D-pad navigation, Leanback launcher)
 - **Package Manager:** pnpm
 - **Test Runner:** Vitest + Testing Library
+
+## PocketBase Local Documentation
+
+When working on PocketBase features (JS migrations, hooks, SDK usage, collection operations),
+**ALWAYS consult local docs first** — they contain the exact PB 0.38.0 API reference.
+
+- Core docs: `/Users/markb/dev/pb-llm/docs/session_2026-05-14_08-12-29.891/pocketbase_docs_core.txt`
+- JS/SDK docs: `/Users/markb/dev/pb-llm/docs/session_2026-05-14_08-12-29.891/pocketbase_docs_js.txt`
+- Full docs: `/Users/markb/dev/pb-llm/docs/session_2026-05-14_08-12-29.891/pocketbase_docs_full.txt`
+
+Key PB 0.38.0 patterns already in use:
+- JS migrations in `web/pocketbase/pb_migrations/` (`new Collection()` + `$app.save()`)
+- `pb.autoCancellation(false)` required for SPA usage
+- `pb.authStore.onChange()` for React auth state sync
+- Autodate fields must be explicit in base collections (created/updated)
 
 ## Quick Start
 
@@ -25,7 +43,10 @@ pnpm tauri dev
 ./scripts/emulator-start.sh   # start emulator in another terminal
 ./scripts/dev-loop.sh         # build + install + launch + hot reload
 
-# 4. Demo (headed emulator + dev)
+# 4. Web portal dev
+./scripts/web-dev.sh          # starts PocketBase + Vite on :5173
+
+# 5. Demo (headed emulator + dev)
 ./scripts/demo.sh
 ```
 
@@ -109,30 +130,39 @@ const { focusedIndex, setRef } = useDpadFocus(itemCount);
 ## File Structure
 
 ```
-src/
-  App.tsx              # Navigation, pages, D-pad hooks
-  main.tsx             # Entry point
-  index.css            # Tailwind v4, focus ring styles
-  lib/utils.ts         # cn() utility
-  components/ui/       # shadcn/ui components
-    button.tsx         # Button with "tv" variant
-src-tauri/
-  tauri.conf.json      # Tauri config
-  src/lib.rs           # Rust entry
-  gen/android/         # Generated Android project
-    tauri.settings.gradle    # ⚠️ Must exist (may be empty)
-    app/tauri.build.gradle.kts # ⚠️ Must exist (may be empty)
+src/                    # Tauri Android TV app
+  App.tsx               # Navigation, pages, D-pad hooks
+  main.tsx              # Entry point
+  index.css             # Tailwind v4, focus ring styles
+  lib/utils.ts          # cn() utility
+  components/ui/        # shadcn/ui components
+  pages/                # TV pages
+src-tauri/              # Tauri Rust backend
+  tauri.conf.json
+  src/lib.rs
+  gen/android/          # Generated Android project
+web/                    # Web portal (React + PocketBase)
+  pocketbase/
+    pocketbase          # Binary (download, don't commit)
+    pb_data/            # SQLite DB (gitignored)
+    pb_migrations/      # JS migration files (commit)
+  src/
+    lib/pocketbase.ts   # PB client singleton (autoCancellation off)
+    hooks/useAuth.ts    # Auth state, login, signup, logout
+    hooks/usePlaylists.ts # Playlist CRUD hook
+    pages/              # Login, Signup, Dashboard
+    components/         # PlaylistCard, PlaylistForm, shadcn/ui
+  vite.config.ts        # Vite config, proxy to PB
+  tailwind.config.js    # Tailwind 3 config
 scripts/
-  emulator-start.sh    # Start/stop emulator
-  dev-loop.sh          # Tauri android dev
-  demo.sh              # Headed emulator + dev
-  build-release.sh     # Production APK build
-  setup-android.sh     # Fix missing Gradle files
-  screenshot.sh        # Screenshot utility
-.pi/skills/emulator-loop/  # Emulator skill
-__tests__/
-  app.test.tsx         # Navigation + D-pad tests
-  setup.ts             # Test setup
+  emulator-start.sh     # Start/stop emulator
+  dev-loop.sh           # Tauri android dev
+  web-dev.sh            # Start PocketBase + Vite concurrently
+  demo.sh
+  build-release.sh
+  setup-android.sh
+  screenshot.sh
+__tests__/              # TV app tests
 ```
 
 ## Emulator
