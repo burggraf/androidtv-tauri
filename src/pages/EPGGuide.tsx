@@ -369,16 +369,17 @@ export function EPGGuide({ onBack }: { onBack?: () => void }) {
 
           {/* Program Grid + Timeline Header */}
           <div ref={programGridRef} className="flex-1 overflow-auto relative">
+            {/* Full-width wrapper for proper scroll */}
             <div style={{ width: (TIMELINE_END_HOUR - TIMELINE_START_HOUR + 1) * HOUR_WIDTH }}>
               {/* Timeline Header */}
-              <div className="h-8 bg-[#0d1224] border-b border-[#1a2040] sticky top-0 z-10 relative">
+              <div className="h-8 bg-[#0d1224] border-b border-[#1a2040] sticky top-0 z-10 relative" style={{ width: (TIMELINE_END_HOUR - TIMELINE_START_HOUR + 1) * HOUR_WIDTH }}>
                 {Array.from({ length: TIMELINE_END_HOUR - TIMELINE_START_HOUR + 1 }, (_, i) => TIMELINE_START_HOUR + i).map((hour) => (
                   <div
                     key={hour}
                     className="absolute top-0 h-8 text-xs text-zinc-500 flex items-center border-l border-[#1a2040]"
                     style={{ left: (hour - TIMELINE_START_HOUR) * HOUR_WIDTH, width: HOUR_WIDTH }}
                   >
-                    <span className="px-2 font-medium tabular-nums whitespace-nowrap">{formatTimeSlot(hour)}</span>
+                    <span className="pl-2 font-medium tabular-nums whitespace-nowrap">{formatTimeSlot(hour)}</span>
                   </div>
                 ))}
               </div>
@@ -390,6 +391,8 @@ export function EPGGuide({ onBack }: { onBack?: () => void }) {
               >
                 <div className="w-2 h-2 bg-blue-500 rounded-full -ml-[3px] -mt-1 absolute top-0" />
               </div>
+
+              {/* Program rows */}
               {visibleChannels.map((channel, channelIdx) => {
                 const programs = getProgramsForChannel(channel.id);
                 return (
@@ -403,7 +406,7 @@ export function EPGGuide({ onBack }: { onBack?: () => void }) {
                   >
                     {programs.map((program) => {
                       if (!program || program.startHour == null || program.durationHours == null) return null;
-                      const startOffset = Math.max(0, (program.startHour - TIMELINE_START_HOUR) * HOUR_WIDTH);
+                      const startOffset = (program.startHour - TIMELINE_START_HOUR) * HOUR_WIDTH;
                       const duration = program.durationHours * HOUR_WIDTH;
 
                       return (
