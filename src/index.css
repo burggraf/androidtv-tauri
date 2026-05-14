@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+:root {
+  --background: hsl(224 71% 4%);
+  --foreground: hsl(213 31% 91%);
+  --muted: hsl(223 47% 11%);
+  --muted-foreground: hsl(215.4 16.3% 56.9%);
+  --card: hsl(224 71% 4%);
+  --card-foreground: hsl(213 31% 91%);
+  --popover: hsl(224 71% 4%);
+  --popover-foreground: hsl(213 31% 91%);
+  --border: hsl(216 34% 17%);
+  --input: hsl(216 34% 17%);
+  --primary: hsl(210 40% 98%);
+  --primary-foreground: hsl(222.2 47.4% 1.2%);
+  --secondary: hsl(222.2 47.4% 11.2%);
+  --secondary-foreground: hsl(210 40% 98%);
+  --accent: hsl(216 34% 17%);
+  --accent-foreground: hsl(210 40% 98%);
+  --destructive: hsl(0 63% 31%);
+  --destructive-foreground: hsl(210 40% 98%);
+  --ring: hsl(216 34% 17%);
+  --radius: 0.5rem;
+
+  /* Android TV focus ring */
+  --focus-ring: hsl(210 100% 50%);
+}
+
+* {
+  border-color: var(--border);
+  outline-color: transparent;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Android TV D-pad focus styles */
+.focusable {
+  transition: outline 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  outline: 3px solid transparent;
+  outline-offset: 2px;
+}
+
+.focusable:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+  transform: scale(1.05);
+  box-shadow: 0 0 16px rgba(59, 130, 246, 0.4);
+}
+
+.focusable:focus {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+  transform: scale(1.05);
+  box-shadow: 0 0 16px rgba(59, 130, 246, 0.4);
+}
