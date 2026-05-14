@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { pb } from '@/lib/pocketbase'
+import { xstreamEnrich } from '@/lib/xstream'
 
 export interface Playlist {
   id: string
@@ -8,10 +9,10 @@ export interface Playlist {
   type: 'm3u' | 'xstream'
   enabled: boolean
   user: string
-  // Xstream Codes credentials
+  
   username?: string
   password?: string
-  // Account metadata (auto-populated from xstream API)
+  
   expires?: string
   max_streams?: number
   current_streams?: number
@@ -58,19 +59,37 @@ export function usePlaylists() {
   }, [fetchPlaylists])
 
   const createPlaylist = useCallback(async (data: PlaylistInput) => {
+    let metadata = {}
+    if (data.type === 'xstream' && data.username && data.password) {
+      metadata = await xstreamEnrich(data.url, data.username, data.password)
+    }
+
     const item = await pb.collection('playlists').create<Playlist>({
       ...data,
       user: pb.authStore.record?.id,
+      ...metadata,
     })
     setPlaylists((prev) => [item, ...prev])
     return item
   }, [])
 
   const updatePlaylist = useCallback(async (id: string, data: Partial<PlaylistInput>) => {
-    const item = await pb.collection('playlists').update<Playlist>(id, data)
+    // If xstream fields present, re-validate and refresh metadata
+    let metadata = {}
+    if (data.type === 'xstream' && (data.username || data.password || data.url)) {
+      const existing = playlists.find(p => p.id === id)
+      const url = data.url ?? existing?.url ?? ''
+      const username = data.username ?? existing?.username ?? ''
+      const password = data.password ?? existing?.password ?? ''
+      if (username && password) {
+        metadata = await xstreamEnrich(url, username, password)
+      }
+    }
+
+    const item = await pb.collection('playlists').update<Playlist>(id, { ...data, ...metadata })
     setPlaylists((prev) => prev.map((p) => (p.id === id ? item : p)))
     return item
-  }, [])
+  }, [playlists])
 
   const deletePlaylist = useCallback(async (id: string) => {
     await pb.collection('playlists').delete(id)

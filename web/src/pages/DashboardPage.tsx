@@ -12,10 +12,16 @@ export default function DashboardPage() {
   const { user, logout } = useAuth()
   const { playlists, loading, error, createPlaylist, updatePlaylist, deletePlaylist } = usePlaylists()
   const [creating, setCreating] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   const handleCreate = async (data: PlaylistInput) => {
-    await createPlaylist(data)
-    setCreating(false)
+    try {
+      setSubmitError(null)
+      await createPlaylist(data)
+      setCreating(false)
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : 'Failed to create playlist')
+    }
   }
 
   return (
@@ -57,10 +63,13 @@ export default function DashboardPage() {
           </Dialog>
         </div>
 
-        {error && (
+        {(error || submitError) && (
           <Card className="mb-6 border-destructive">
             <CardContent className="pt-6">
-              <p className="text-sm text-destructive">{error}</p>
+              <p className="text-sm text-destructive">{submitError || error}</p>
+              {submitError && (
+                <button className="text-xs text-muted-foreground underline mt-1" onClick={() => setSubmitError(null)}>Dismiss</button>
+              )}
             </CardContent>
           </Card>
         )}
@@ -101,7 +110,14 @@ export default function DashboardPage() {
               <PlaylistCard
                 key={playlist.id}
                 playlist={playlist}
-                onUpdate={updatePlaylist}
+                onUpdate={async (id, data) => {
+                  try {
+                    setSubmitError(null)
+                    await updatePlaylist(id, data)
+                  } catch (err: unknown) {
+                    setSubmitError(err instanceof Error ? err.message : 'Failed to update playlist')
+                  }
+                }}
                 onDelete={deletePlaylist}
               />
             ))}
