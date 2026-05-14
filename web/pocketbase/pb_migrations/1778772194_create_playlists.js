@@ -44,6 +44,18 @@ migrate((app) => {
         collectionId: usersCollection.id,
         cascadeDelete: true,
       },
+      {
+        name: "created",
+        type: "autodate",
+        onCreate: true,
+        onUpdate: false,
+      },
+      {
+        name: "updated",
+        type: "autodate",
+        onCreate: true,
+        onUpdate: true,
+      },
     ],
     indexes: [
       "CREATE INDEX idx_playlists_user ON playlists (user)",
