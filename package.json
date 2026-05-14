@@ -23,6 +23,9 @@
     "react-dom": "^19.1.0",
     "tailwind-merge": "^3.6.0"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.0",
     "@tauri-apps/cli": "^2",

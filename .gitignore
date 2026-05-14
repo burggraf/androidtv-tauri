@@ -34,3 +34,18 @@ src-tauri/gen/android/.idea/
 *.sln
 *.sw?
 screenshot-*.png
+
+# Web portal
+web/node_modules
+web/dist
+web/.vite
+web/pnpm-lock.yaml
+web/package-lock.json
+
+# PocketBase
+web/pocketbase/pb_data/
+web/pocketbase/pocketbase
+web/pocketbase/pocketbase_*.zip
+
+# Local npmrc workaround for pnpm 11+
+.npmrc

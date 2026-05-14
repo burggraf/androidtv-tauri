@@ -1,2 +1,5 @@
+packages:
+  - '.'
+  - 'web'
 allowBuilds:
-  esbuild: true
+  esbuild: set this to true or false
