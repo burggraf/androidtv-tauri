@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
+import { Eye, EyeOff } from 'lucide-react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { type Playlist, type PlaylistInput } from '@/hooks/usePlaylists'
@@ -48,6 +50,7 @@ export default function PlaylistForm({ playlist, onSubmit, onCancel }: PlaylistF
   })
 
   const type = useWatch({ control, name: 'type' })
+  const [showPassword, setShowPassword] = useState(false)
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -100,7 +103,17 @@ export default function PlaylistForm({ playlist, onSubmit, onCancel }: PlaylistF
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
-            <Input id="password" type="password" placeholder="••••••••" {...register('password')} />
+            <div className="relative">
+              <Input id="password" type={showPassword ? 'text' : 'password'} placeholder="••••••••" className="pr-10" {...register('password')} />
+              <button
+                type="button"
+                tabIndex={-1}
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
             {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
           </div>
         </div>
