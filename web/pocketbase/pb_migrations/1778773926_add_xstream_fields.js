@@ -1,21 +1,7 @@
-/// <reference path="../pb_data/types.d.ts" />
-
 migrate((app) => {
   const collection = app.findCollectionByNameOrId("playlists");
 
-  // Xstream Codes credentials (required for xstream type, optional in schema)
-  collection.fields.add(new TextField({
-    name: "username",
-    required: false,
-    max: 200,
-  }));
-  collection.fields.add(new TextField({
-    name: "password",
-    required: false,
-    max: 200,
-  }));
-
-  // Account metadata (auto-populated from xstream API)
+  // Add xstream-specific fields only (username/password already in create_playlists)
   collection.fields.add(new DateField({
     name: "expires",
     required: false,
@@ -49,7 +35,7 @@ migrate((app) => {
   return app.save(collection);
 }, (app) => {
   const collection = app.findCollectionByNameOrId("playlists");
-  for (const name of ["username", "password", "expires", "max_streams", "current_streams", "channels", "movies", "series"]) {
+  for (const name of ["expires", "max_streams", "current_streams", "channels", "movies", "series"]) {
     const field = collection.fields.getByName(name);
     if (field) collection.fields.removeById(field.id);
   }
