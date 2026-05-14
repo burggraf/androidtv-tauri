@@ -32,4 +32,4 @@ fi
 
 # Start Vite dev server
 echo "🚀 Starting Vite dev server..."
-cd "$WEB_DIR" && npx vite
+cd "$WEB_DIR" && npx vite --host

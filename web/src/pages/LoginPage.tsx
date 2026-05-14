@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -19,6 +19,8 @@ type LoginForm = z.infer<typeof loginSchema>
 export default function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const redirect = searchParams.get('redirect') || '/dashboard'
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -31,7 +33,7 @@ export default function LoginPage() {
       setError(null)
       setLoading(true)
       await login(data.email, data.password)
-      navigate('/dashboard')
+      navigate(redirect, { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to login. Check your credentials.')
     } finally {
