@@ -1,4 +1,4 @@
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { type Playlist, type PlaylistInput } from '@/hooks/usePlaylists'
@@ -7,10 +7,21 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 const playlistSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(200, 'Name must be under 200 characters'),
-  url: z.string().url('Must be a valid URL').min(1, 'URL is required'),
+  name: z.string().min(1, 'Name is required').max(200),
+  url: z.string().url('Must be a valid URL'),
   type: z.enum(['m3u', 'xstream']),
   enabled: z.boolean().default(true),
+  username: z.string().max(200).optional(),
+  password: z.string().max(200).optional(),
+}).superRefine((data, ctx) => {
+  if (data.type === 'xstream') {
+    if (!data.username?.trim()) {
+      ctx.addIssue({ code: 'custom', path: ['username'], message: 'Username is required for Xtream Codes' })
+    }
+    if (!data.password?.trim()) {
+      ctx.addIssue({ code: 'custom', path: ['password'], message: 'Password is required for Xtream Codes' })
+    }
+  }
 })
 
 type PlaylistFormValues = z.infer<typeof playlistSchema>
@@ -22,54 +33,88 @@ interface PlaylistFormProps {
 }
 
 export default function PlaylistForm({ playlist, onSubmit, onCancel }: PlaylistFormProps) {
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<PlaylistFormValues>({
+  const { register, handleSubmit, control, formState: { errors, isSubmitting } } = useForm<PlaylistFormValues>({
     resolver: zodResolver(playlistSchema),
     defaultValues: playlist
-      ? { name: playlist.name, url: playlist.url, type: playlist.type, enabled: playlist.enabled }
-      : { name: '', url: '', type: 'm3u', enabled: true },
+      ? {
+          name: playlist.name,
+          url: playlist.url,
+          type: playlist.type,
+          enabled: playlist.enabled,
+          username: playlist.username ?? '',
+          password: playlist.password ?? '',
+        }
+      : { name: '', url: '', type: 'm3u', enabled: true, username: '', password: '' },
   })
 
-  const handleFormSubmit = async (data: PlaylistFormValues) => {
-    await onSubmit(data)
-  }
+  const type = useWatch({ control, name: 'type' })
 
   return (
-    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      {/* Name */}
       <div className="space-y-2">
         <Label htmlFor="name">Playlist Name</Label>
         <Input id="name" placeholder="My IPTV Playlist" {...register('name')} />
         {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="url">Playlist URL</Label>
-        <Input id="url" type="url" placeholder="https://example.com/playlist.m3u" {...register('url')} />
-        {errors.url && <p className="text-sm text-destructive">{errors.url.message}</p>}
-      </div>
-
+      {/* Type toggle */}
       <div className="space-y-2">
         <Label>Type</Label>
         <div className="flex gap-4">
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input type="radio" value="m3u" {...register('type')} className="accent-primary" />
             M3U
           </label>
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input type="radio" value="xstream" {...register('type')} className="accent-primary" />
             Xtream Codes
           </label>
         </div>
       </div>
 
+      {/* URL */}
+      <div className="space-y-2">
+        <Label htmlFor="url">
+          {type === 'xstream' ? 'Server URL' : 'Playlist URL'}
+        </Label>
+        <Input
+          id="url"
+          type="url"
+          placeholder={type === 'xstream' ? 'http://provider.com:8080' : 'http://provider.com/playlist.m3u'}
+          {...register('url')}
+        />
+        {errors.url && <p className="text-sm text-destructive">{errors.url.message}</p>}
+      </div>
+
+      {/* Xstream credentials — only shown when type === 'xstream' */}
+      {type === 'xstream' && (
+        <div className="rounded-md border border-zinc-700 p-4 space-y-4">
+          <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
+            Xtream Codes Credentials
+          </p>
+          <div className="space-y-2">
+            <Label htmlFor="username">Username</Label>
+            <Input id="username" placeholder="your_username" {...register('username')} />
+            {errors.username && <p className="text-sm text-destructive">{errors.username.message}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <Input id="password" type="password" placeholder="••••••••" {...register('password')} />
+            {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
+          </div>
+        </div>
+      )}
+
+      {/* Enabled */}
       <div className="flex items-center gap-2">
         <input type="checkbox" id="enabled" {...register('enabled')} className="accent-primary" />
         <Label htmlFor="enabled" className="cursor-pointer">Enabled</Label>
       </div>
 
+      {/* Actions */}
       <div className="flex justify-end gap-2 pt-2">
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
+        <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>
         <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? 'Saving...' : playlist ? 'Update' : 'Create'}
         </Button>

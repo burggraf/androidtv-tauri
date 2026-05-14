@@ -8,6 +8,16 @@ export interface Playlist {
   type: 'm3u' | 'xstream'
   enabled: boolean
   user: string
+  // Xstream Codes credentials
+  username?: string
+  password?: string
+  // Account metadata (auto-populated from xstream API)
+  expires?: string
+  max_streams?: number
+  current_streams?: number
+  channels?: number
+  movies?: number
+  series?: number
   created: string
   updated: string
   collectionId: string
@@ -19,6 +29,8 @@ export interface PlaylistInput {
   url: string
   type: 'm3u' | 'xstream'
   enabled: boolean
+  username?: string
+  password?: string
 }
 
 export function usePlaylists() {

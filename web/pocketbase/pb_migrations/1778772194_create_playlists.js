@@ -44,6 +44,16 @@ migrate((app) => {
         collectionId: usersCollection.id,
         cascadeDelete: true,
       },
+      // Xstream Codes credentials
+      { name: "username", type: "text", required: false, max: 200 },
+      { name: "password", type: "text", required: false, max: 200 },
+      // Account metadata (auto-populated from xstream API)
+      { name: "expires", type: "date", required: false },
+      { name: "max_streams", type: "number", required: false, onlyInt: true },
+      { name: "current_streams", type: "number", required: false, onlyInt: true },
+      { name: "channels", type: "number", required: false, onlyInt: true },
+      { name: "movies", type: "number", required: false, onlyInt: true },
+      { name: "series", type: "number", required: false, onlyInt: true },
       {
         name: "created",
         type: "autodate",
