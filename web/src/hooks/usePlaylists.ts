@@ -29,8 +29,8 @@ export interface PlaylistInput {
   url: string
   type: 'm3u' | 'xstream'
   enabled: boolean
-  username?: string
-  password?: string
+  username: string
+  password: string
 }
 
 export function usePlaylists() {

@@ -11,8 +11,8 @@ const playlistSchema = z.object({
   url: z.string().url('Must be a valid URL'),
   type: z.enum(['m3u', 'xstream']),
   enabled: z.boolean().default(true),
-  username: z.string().max(200).optional(),
-  password: z.string().max(200).optional(),
+  username: z.string().max(200).optional().default(''),
+  password: z.string().max(200).optional().default(''),
 }).superRefine((data, ctx) => {
   if (data.type === 'xstream') {
     if (!data.username?.trim()) {
