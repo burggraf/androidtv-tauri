@@ -33,3 +33,4 @@ src-tauri/gen/android/.idea/
 *.njsproj
 *.sln
 *.sw?
+screenshot-*.png

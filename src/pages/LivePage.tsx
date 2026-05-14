@@ -12,8 +12,7 @@ export function LivePage({ onBack }: { onBack: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showControls, setShowControls] = useState(true);
-  const [status, setStatus] = useState("initializing");
-  const hideTimer = useRef<ReturnType<typeof setTimeout>>();
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const hideControls = useCallback(() => {
     clearTimeout(hideTimer.current);
@@ -32,64 +31,31 @@ export function LivePage({ onBack }: { onBack: () => void }) {
     let hls: Hls | null = null;
     const src = TEST_CHANNEL.url;
 
-    // Debug: log MSE support
-    const ms = (window as unknown as Record<string, unknown>).MediaSource as { isTypeSupported?: (s: string) => boolean };
-    console.log("[LivePage] MSE supported:", typeof ms !== "undefined" && ms.isTypeSupported?.('video/mp4; codecs="avc1.42E01E"'));
-
     if (Hls.isSupported()) {
-      console.log("[LivePage] Using hls.js");
       hls = new Hls({
         enableWorker: true,
         lowLatencyMode: false,
         maxBufferLength: 30,
-        debug: true,
       });
-
-      hls.on(Hls.Events.FRAG_LOADED, () => console.log("[LivePage] fragment loaded"));
-      hls.on(Hls.Events.LEVEL_LOADED, (_e, d) => console.log("[LivePage] level loaded, totalDuration:", d.totalduration));
-      hls.on(Hls.Events.FRAG_BUFFERED, () => console.log("[LivePage] fragment buffered"));
 
       hls.loadSource(src);
       hls.attachMedia(video);
 
-      hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-        console.log("[LivePage] media attached");
-        setStatus("media attached");
-      });
-
-      hls.on(Hls.Events.MANIFEST_PARSED, (_e, d) => {
-        console.log("[LivePage] manifest parsed, levels:", d.levels.length);
-        setStatus("manifest parsed, playing…");
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
         setLoading(false);
-        video.play().then(() => {
-          console.log("[LivePage] play succeeded");
-          setStatus("playing");
-        }).catch((e) => {
-          console.log("[LivePage] play failed:", e);
-          setStatus("play failed: " + e.message);
-          // Try muted play
-          video.muted = true;
-          video.play().then(() => {
-            console.log("[LivePage] muted play succeeded");
-            setStatus("playing (muted)");
-          }).catch((e2) => {
-            console.log("[LivePage] muted play also failed:", e2);
-            setStatus("muted play failed: " + e2.message);
-          });
+        video.play().catch(() => {
+          // Autoplay blocked — user interaction needed
         });
         hideControls();
       });
 
       hls.on(Hls.Events.ERROR, (_event, data) => {
-        console.log("[LivePage] hls error:", data.type, data.details, data.fatal);
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              setStatus("Network error — recovering…");
               hls?.startLoad();
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
-              setStatus("Media error — recovering…");
               hls?.recoverMediaError();
               break;
             default:
@@ -99,16 +65,11 @@ export function LivePage({ onBack }: { onBack: () => void }) {
           }
         }
       });
-
-      hls.on(Hls.Events.FRAG_LOAD_EMERGENCY_ABORTED, () => {
-        console.log("[LivePage] frag load emergency aborted");
-      });
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      console.log("[LivePage] Native HLS support");
       video.src = src;
       video.addEventListener("loadedmetadata", () => {
         setLoading(false);
-        video.play().catch((e) => console.log("[LivePage] native play failed:", e));
+        video.play().catch(() => {});
         hideControls();
       });
       video.addEventListener("error", () => setError("Failed to load stream"));
@@ -119,23 +80,6 @@ export function LivePage({ onBack }: { onBack: () => void }) {
     return () => {
       hls?.destroy();
       clearTimeout(hideTimer.current);
-    };
-  }, []);
-
-  // Debug: log video events
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    const events = ["play", "playing", "pause", "ended", "error", "waiting", "stalled", "canplay", "canplaythrough", "loadeddata", "loadedmetadata", "suspend"];
-    const handlers: Record<string, () => void> = {};
-    for (const evt of events) {
-      handlers[evt] = () => console.log(`[LivePage] video event: ${evt}`);
-      video.addEventListener(evt, handlers[evt]);
-    }
-    return () => {
-      for (const evt of events) {
-        video.removeEventListener(evt, handlers[evt]);
-      }
     };
   }, []);
 
@@ -158,11 +102,10 @@ export function LivePage({ onBack }: { onBack: () => void }) {
       onMouseMove={showControlsTemporarily}
       onClick={showControlsTemporarily}
     >
-      {/* Status overlay (debug) */}
-      {(loading || status) && !error && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-black">
-          {loading && <div className="text-white text-2xl mb-4 animate-pulse">Loading {TEST_CHANNEL.name}…</div>}
-          <div className="text-gray-400 text-sm font-mono">{status}</div>
+      {/* Loading overlay */}
+      {loading && !error && (
+        <div className="absolute inset-0 flex items-center justify-center z-20 bg-black">
+          <div className="text-white text-2xl animate-pulse">Loading {TEST_CHANNEL.name}…</div>
         </div>
       )}
 
@@ -184,7 +127,6 @@ export function LivePage({ onBack }: { onBack: () => void }) {
         ref={videoRef}
         playsInline
         autoPlay
-        muted
         style={{
           position: "fixed",
           top: 0,
