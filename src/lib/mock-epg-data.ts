@@ -24,9 +24,9 @@ export interface Category {
 }
 
 // Time helpers
-const now = new Date();
-const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-const h = (hours: number) => new Date(today.getTime() + hours * 3600000);
+
+
+
 
 // Mock channels (12 channels)
 export const MOCK_CHANNELS: Channel[] = [
@@ -45,8 +45,7 @@ export const MOCK_CHANNELS: Channel[] = [
 ];
 
 // Generate programs relative to current time for realistic coverage
-const currentHour = now.getHours() + now.getMinutes() / 60;
-const startOffset = 13; // Programs start at 1 PM
+
 
 // Helper to create programs for a channel
 function createPrograms(channelId: string, programs: { title: string; start: number; dur: number; desc?: string }[]): Program[] {

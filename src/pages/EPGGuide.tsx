@@ -32,11 +32,12 @@ import {
 const SIDEBAR_FULL_WIDTH = 400; // nav (180px) + categories (220px)
 const SIDEBAR_COLLAPSED_WIDTH = 260; // icon rail (52px) + categories (~200px)
 const NOW_PLAYING_HEIGHT = 240;
-const TIMELINE_HEADER_HEIGHT = 28;
+
 // Channel rows will be calculated to fill remaining space
 const HOUR_WIDTH = 260;
 const HALF_HOUR_WIDTH = HOUR_WIDTH / 2;
 const CHANNEL_LIST_WIDTH = 200;
+const CHANNEL_ROW_HEIGHT = 32;
 const TIMELINE_START_HOUR = 13;
 const TIMELINE_END_HOUR = 22;
 const HALF_HOUR_INCREMENT = 0.5;
@@ -220,17 +221,22 @@ export function EPGGuide({ onBack, onTuneChannel }: { onBack?: () => void; onTun
           }
         }
       } else {
+        // State 2: only nav column is focusable (leftmost active column)
         if (e.key === "ArrowRight") {
           e.preventDefault();
           setSidebarState(1);
         } else if (e.key === "ArrowUp") {
           e.preventDefault();
-          setFocusedCategoryIdx((i) => Math.max(0, i - 1));
           setFocusedNavIdx((i) => Math.max(0, i - 1));
         } else if (e.key === "ArrowDown") {
           e.preventDefault();
-          setFocusedCategoryIdx((i) => Math.min(MOCK_CATEGORIES.length - 1, i + 1));
           setFocusedNavIdx((i) => Math.min(NAV_ITEMS.length - 1, i + 1));
+        } else if (e.key === "Enter") {
+          e.preventDefault();
+          const navItem = NAV_ITEMS[focusedNavIdx];
+          if (navItem?.id === "tv") {
+            setSidebarState(0);
+          }
         }
       }
 
@@ -246,7 +252,19 @@ export function EPGGuide({ onBack, onTuneChannel }: { onBack?: () => void; onTun
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [sidebarState, visibleChannels.length, focusedCategoryIdx, onBack, highlightedChannel, onTuneChannel]);
+  }, [sidebarState, visibleChannels.length, focusedNavIdx, focusedCategoryIdx, onBack, highlightedChannel, onTuneChannel]);
+
+  // Sync scroll: channel list drives program grid vertical scroll
+  useEffect(() => {
+    const chList = channelListRef.current;
+    const progGrid = programGridRef.current;
+    if (!chList || !progGrid) return;
+    const onScroll = () => {
+      progGrid.scrollTop = chList.scrollTop;
+    };
+    chList.addEventListener("scroll", onScroll);
+    return () => chList.removeEventListener("scroll", onScroll);
+  }, []);
 
   // Auto-scroll focused channel into view
   useEffect(() => {
@@ -405,9 +423,7 @@ export function EPGGuide({ onBack, onTuneChannel }: { onBack?: () => void; onTun
                   </div>
 
                   <div className="flex items-center gap-3 flex-shrink-0">
-                    <button className="text-zinc-500 hover:text-yellow-400 transition-colors focusable p-1">
-                      <Icon name="starOutline" className="w-6 h-6" />
-                    </button>
+                    <Icon name="starOutline" className="w-6 h-6 text-zinc-600" />
                     <div className="text-right">
                       <p className="text-sm text-white font-medium">{MOCK_PROVIDER_NAME}</p>
                       <p className="text-xs text-zinc-500">{currentCategory.name}</p>
@@ -445,9 +461,10 @@ export function EPGGuide({ onBack, onTuneChannel }: { onBack?: () => void; onTun
                 <div
                 key={channel.id}
                 className={cn(
-                  "flex items-center gap-2 px-3 transition-colors cursor-pointer focusable flex-1 min-h-0",
+                  "flex items-center gap-2 px-3 transition-colors cursor-pointer focusable",
                   idx === focusedChannelIdx ? "bg-blue-600/15" : "hover:bg-[#1a2040]"
                 )}
+                style={{ height: CHANNEL_ROW_HEIGHT, minHeight: CHANNEL_ROW_HEIGHT }}
                 onClick={() => setFocusedChannelIdx(idx)}
               >
                 <span className="text-xs text-zinc-500 w-4 text-right flex-shrink-0 tabular-nums">
@@ -491,17 +508,18 @@ export function EPGGuide({ onBack, onTuneChannel }: { onBack?: () => void; onTun
                 <div className="w-2 h-2 bg-blue-500 rounded-full -ml-[3px] absolute -top-1" />
               </div>
 
-              {/* Program rows - flex container fills remaining height */}
-              <div className="flex flex-col flex-1">
+              {/* Program rows */}
+              <div className="flex flex-col">
                 {visibleChannels.map((channel, channelIdx) => {
                   const programs = getProgramsForChannel(channel.id);
                   return (
                     <div
                       key={channel.id}
                       className={cn(
-                        "border-b border-[#1a2040] relative flex-1 min-h-0",
+                        "border-b border-[#1a2040] relative",
                         channelIdx === focusedChannelIdx && "bg-blue-600/5"
                       )}
+                      style={{ height: CHANNEL_ROW_HEIGHT, minHeight: CHANNEL_ROW_HEIGHT }}
                     >
                       {programs.map((program) => {
                         if (!program || program.startHour == null || program.durationHours == null) return null;

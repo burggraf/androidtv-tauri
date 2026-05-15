@@ -2,7 +2,7 @@
  * Pair Screen — shows QR code linking to web portal pair page.
  * Polls PocketBase for the device record to detect when pairing completes.
  */
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import QRCode from 'qrcode'
 import { getDeviceId } from '@/lib/device-id'
 import { pb } from '@/lib/pb-client'
@@ -11,7 +11,7 @@ const POLL_INTERVAL_MS = 3000
 
 function useDevicePairing(deviceId: string) {
   const [isPaired, setIsPaired] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [_error, _setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -32,7 +32,7 @@ function useDevicePairing(deviceId: string) {
     return () => { cancelled = true; clearInterval(id) }
   }, [deviceId])
 
-  return { isPaired, error }
+  return { isPaired, error: _error }
 }
 
 export function PairScreen() {

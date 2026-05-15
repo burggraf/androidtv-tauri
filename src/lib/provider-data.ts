@@ -11,10 +11,7 @@
 
 import { gunzipSync } from 'fflate'
 
-/** Escape value for PB filter string interpolation */
-function esc(v: string): string {
-  return v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-}
+
 import { pb } from './pb-client'
 import {
   type CategoryPrefRecord,
