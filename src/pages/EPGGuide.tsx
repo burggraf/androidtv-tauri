@@ -430,19 +430,19 @@ export function EPGGuide({ onBack, onTuneChannel }: { onBack?: () => void; onTun
           {/* Channel List */}
           <div
             ref={channelListRef}
-            className="flex-shrink-0 bg-[#0d1224] border-r border-[#1a2040]"
+            className="flex-shrink-0 bg-[#0d1224] border-r border-[#1a2040] flex flex-col"
             style={{ width: CHANNEL_LIST_WIDTH }}
           >
             {/* Header - date/time aligned with channel column */}
             <div
-              className="h-8 flex items-center px-3 text-xs text-blue-400 font-medium bg-[#0d1224] border-b border-[#1a2040] sticky top-0 z-20"
+              className="h-8 flex items-center px-3 text-xs text-blue-400 font-medium bg-[#0d1224] border-b border-[#1a2040] sticky top-0 z-20 flex-shrink-0"
               style={{ width: CHANNEL_LIST_WIDTH }}
             >
               {formatDateTime(currentTime).split(",").slice(0, 2).join(",")}
             </div>
 
-            {/* Channel rows - flex container fills remaining height */}
-            <div className="flex flex-col overflow-y-auto" style={{ height: `calc(100vh - ${NOW_PLAYING_HEIGHT}px - ${TIMELINE_HEADER_HEIGHT}px - 32px)` }}>
+            {/* Channel rows */}
+            <div className="flex flex-col flex-1 overflow-y-auto">
               {visibleChannels.map((channel, idx) => (
                 <div
                 key={channel.id}
@@ -465,8 +465,8 @@ export function EPGGuide({ onBack, onTuneChannel }: { onBack?: () => void; onTun
           </div>
 
           {/* Program Grid + Timeline Header */}
-          <div ref={programGridRef} className="flex-1 overflow-auto relative">
-            <div style={{ width: totalGridWidth }}>
+          <div ref={programGridRef} className="flex-1 overflow-auto relative flex flex-col">
+            <div style={{ width: totalGridWidth }} className="flex flex-col flex-1">
               {/* Timeline Header - separate row above grid */}
               <div className="h-8 bg-[#0d1224] border-b border-[#1a2040] sticky top-0 z-10 relative" style={{ width: totalGridWidth }}>
                 {timeSlots.map((hour, idx) => (
@@ -494,7 +494,7 @@ export function EPGGuide({ onBack, onTuneChannel }: { onBack?: () => void; onTun
               </div>
 
               {/* Program rows - flex container fills remaining height */}
-              <div className="flex flex-col" style={{ height: `calc(100vh - ${NOW_PLAYING_HEIGHT}px - ${TIMELINE_HEADER_HEIGHT}px)` }}>
+              <div className="flex flex-col flex-1">
                 {visibleChannels.map((channel, channelIdx) => {
                   const programs = getProgramsForChannel(channel.id);
                   return (
