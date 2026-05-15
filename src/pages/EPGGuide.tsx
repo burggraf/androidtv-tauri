@@ -29,8 +29,8 @@ import {
 } from "@/lib/mock-epg-data";
 
 // ── Constants ────────────────────────────────────────────────
-const SIDEBAR_FULL_WIDTH = 260;
-const SIDEBAR_COLLAPSED_WIDTH = 200;
+const SIDEBAR_FULL_WIDTH = 400; // nav (180px) + categories (220px)
+const SIDEBAR_COLLAPSED_WIDTH = 260; // icon rail (52px) + categories (~200px)
 const NOW_PLAYING_HEIGHT = 240;
 const TIMELINE_HEADER_HEIGHT = 28;
 // Channel rows will be calculated to fill remaining space
@@ -283,37 +283,41 @@ export function EPGGuide({ onBack, onTuneChannel }: { onBack?: () => void; onTun
         style={{ width: sidebarState === 0 ? 0 : sidebarWidth }}
       >
         {sidebarState === 2 ? (
-          /* Full sidebar: logo + nav + categories stacked vertically */
-          <div className="flex flex-col h-full">
-            <div className="flex items-center justify-center py-3 border-b border-[#1a2040] flex-shrink-0">
-              <span className="text-lg font-bold tracking-tight">
-                <span className="text-blue-500">tivi</span>
-                <span className="text-white">mate</span>
-              </span>
+          /* Full sidebar: nav column + categories column side-by-side */
+          <div className="flex h-full">
+            {/* Nav column */}
+            <div className="w-[180px] flex-shrink-0 flex flex-col border-r border-[#1a2040]">
+              {/* Logo — top area with generous padding */}
+              <div className="flex items-center gap-3 px-4 pt-6 pb-4 flex-shrink-0">
+                <img src="/public/azabab-logo-icon.png" alt="" className="w-10 h-10" />
+                <span className="text-lg font-bold tracking-tight text-white">Azabab</span>
+              </div>
+              {/* Nav items — vertically centered */}
+              <div className="flex-1 flex flex-col justify-center px-2">
+                {NAV_ITEMS.map((item, idx) => (
+                  <button
+                    key={item.id}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-3 py-2.5 text-[15px] rounded-lg transition-colors focusable",
+                      idx === focusedNavIdx ? "bg-blue-600/30 text-white" : "text-zinc-400 hover:text-white hover:bg-[#1a2040]"
+                    )}
+                  >
+                    <Icon name={item.icon} className="w-5 h-5 flex-shrink-0" />
+                    <span className="truncate">{item.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="py-1 flex-shrink-0">
-              {NAV_ITEMS.map((item, idx) => (
-                <button
-                  key={item.id}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-4 py-2 text-sm transition-colors focusable",
-                    idx === focusedNavIdx ? "bg-blue-600/30 text-white" : "text-zinc-400 hover:text-white hover:bg-[#1a2040]"
-                  )}
-                >
-                  <Icon name={item.icon} className="w-5 h-5 flex-shrink-0" />
-                  <span className="truncate">{item.label}</span>
-                </button>
-              ))}
-            </div>
-            <div className="flex-1 overflow-y-auto py-1 border-t border-[#1a2040]">
-              <div className="px-4 py-2 text-sm font-semibold text-white">
+            {/* Categories column */}
+            <div className="flex-1 overflow-y-auto py-2">
+              <div className="px-4 py-1 text-sm font-semibold text-zinc-300">
                 {MOCK_PROVIDER_NAME}
               </div>
               {MOCK_CATEGORIES.map((cat, idx) => (
                 <button
                   key={cat.id}
                   className={cn(
-                    "w-full text-left px-6 py-1.5 transition-colors focusable text-sm",
+                    "w-full text-left px-4 py-2 transition-colors focusable text-[15px]",
                     idx === focusedCategoryIdx ? "bg-blue-600/25 text-white" : "text-zinc-400 hover:text-white hover:bg-[#1a2040]"
                   )}
                 >
@@ -323,12 +327,12 @@ export function EPGGuide({ onBack, onTuneChannel }: { onBack?: () => void; onTun
             </div>
           </div>
         ) : sidebarState === 1 ? (
-          /* Collapsed sidebar: icon rail on left, categories on right */
+          /* Collapsed sidebar: icon rail + categories */
           <div className="flex h-full">
             {/* Icon rail */}
-            <div className="w-[52px] flex-shrink-0 flex flex-col items-center py-2 gap-1 border-r border-[#1a2040]">
-              <div className="w-8 h-8 flex items-center justify-center mb-2">
-                <Icon name="tv" className="w-5 h-5 text-blue-500" />
+            <div className="w-[52px] flex-shrink-0 flex flex-col items-center py-3 gap-1 border-r border-[#1a2040]">
+              <div className="w-8 h-8 flex items-center justify-center mb-3">
+                <img src="/public/azabab-logo-icon.png" alt="" className="w-7 h-7" />
               </div>
               {NAV_ITEMS.map((item) => (
                 <button
@@ -341,15 +345,15 @@ export function EPGGuide({ onBack, onTuneChannel }: { onBack?: () => void; onTun
               ))}
             </div>
             {/* Categories panel */}
-            <div className="flex-1 overflow-y-auto py-1">
-              <div className="px-3 py-2 text-sm font-semibold text-white">
+            <div className="flex-1 overflow-y-auto py-2">
+              <div className="px-3 py-1 text-sm font-semibold text-zinc-300">
                 {MOCK_PROVIDER_NAME}
               </div>
               {MOCK_CATEGORIES.map((cat, idx) => (
                 <button
                   key={cat.id}
                   className={cn(
-                    "w-full text-left px-3 py-1.5 transition-colors focusable text-sm",
+                    "w-full text-left px-3 py-2 transition-colors focusable text-[15px]",
                     idx === focusedCategoryIdx ? "bg-blue-600/25 text-white" : "text-zinc-400 hover:text-white hover:bg-[#1a2040]"
                   )}
                 >
