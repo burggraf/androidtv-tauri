@@ -1,4 +1,4 @@
-package com.markb.tauri_app
+package com.markb.azabab
 
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge
