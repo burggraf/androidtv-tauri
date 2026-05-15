@@ -185,7 +185,7 @@ export const MOCK_PROGRAMS: Program[] = [
 
 // Mock categories
 export const MOCK_CATEGORIES: Category[] = [
-  { id: "cat-fav", name: "Favorites", channelIds: ["ch1", "ch4", "ch6"] },
+  { id: "cat-fav", name: "Favorites", channelIds: ["ch1", "ch2", "ch3", "ch4", "ch5", "ch6", "ch7"] },
   { id: "cat-usa", name: "USA", channelIds: ["ch1", "ch2", "ch3", "ch4", "ch5", "ch6", "ch7", "ch8", "ch9", "ch10", "ch11", "ch12"] },
   { id: "cat-news", name: "USA | NEWS | REGIONALS", channelIds: ["ch4", "ch5", "ch9"] },
   { id: "cat-entertainment", name: "ENTERTAINMENT", channelIds: ["ch1", "ch2", "ch3", "ch6", "ch7"] },

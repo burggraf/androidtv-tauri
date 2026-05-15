@@ -221,7 +221,7 @@ export function AppContent() {
     return <PairScreen />;
   }
 
-  return <EPGGuide />;
+  return <EPGGuide onTuneChannel={(ch) => console.log('tune:', ch.name)} />;
 }
 
 function MainApp({

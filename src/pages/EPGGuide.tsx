@@ -1,6 +1,17 @@
 /**
  * EPGGuide — TiviMate-style Electronic Program Guide.
  *
+ * Layout structure:
+ *   ┌─────────────────────────────────────────────────────┐
+ *   │           Now Playing Bar (~200px tall)             │
+ *   ├──────────┬──────────────────────────────────────────┤
+ *   │  Date    │  1:30 PM  │  2:00 PM  │  2:30 PM  │ ...  │
+ *   │  + Time  ├──────────┴───────────┴───────────┴──────┤
+ *   │  (in     │  Channel 1 │  Program blocks...          │
+ *   │  channel │  Channel 2 │  Program blocks...          │
+ *   │  column) │  ...       │  ...                        │
+ *   └──────────┴──────────────────────────────────────────┘
+ *
  * Three sidebar states driven by D-pad Left/Right:
  *   0 = hidden (full EPG)
  *   1 = collapsed (icon rail + categories)
@@ -17,15 +28,18 @@ import {
   type Program,
 } from "@/lib/mock-epg-data";
 
-// ── Constants ───────────────────────────────────────────────
+// ── Constants ────────────────────────────────────────────────
 const SIDEBAR_FULL_WIDTH = 260;
 const SIDEBAR_COLLAPSED_WIDTH = 60;
-const CHANNEL_ROW_HEIGHT = 48;
-const HEADER_HEIGHT = 100;
+const NOW_PLAYING_HEIGHT = 180;
+const TIMELINE_HEADER_HEIGHT = 28;
+const CHANNEL_ROW_HEIGHT = 42;
 const HOUR_WIDTH = 260;
+const HALF_HOUR_WIDTH = HOUR_WIDTH / 2;
 const CHANNEL_LIST_WIDTH = 200;
 const TIMELINE_START_HOUR = 13;
 const TIMELINE_END_HOUR = 22;
+const HALF_HOUR_INCREMENT = 0.5;
 
 const NAV_ITEMS = [
   { id: "search", label: "Search", icon: "search" },
@@ -76,6 +90,11 @@ function Icon({ name, className }: { name: string; className?: string }) {
         <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
       </svg>
     ),
+    starOutline: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+      </svg>
+    ),
     chevronUp: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
         <path d="m18 15-6-6-6 6" />
@@ -104,21 +123,36 @@ function formatDateTime(date: Date): string {
 }
 
 function formatTimeSlot(hour: number): string {
-  const h = hour % 12 === 0 ? 12 : hour % 12;
-  const ampm = hour < 12 ? "AM" : "PM";
-  return `${h}:00 ${ampm}`;
+  const h = Math.floor(hour);
+  const m = Math.round((hour - h) * 60);
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  const ampm = h < 12 ? "AM" : "PM";
+  return m === 0 ? `${h12}:00 ${ampm}` : `${h12}:${m.toString().padStart(2, "0")} ${ampm}`;
+}
+
+// Generate time slots at half-hour intervals
+function getTimeSlots(): number[] {
+  const slots: number[] = [];
+  for (let h = TIMELINE_START_HOUR; h <= TIMELINE_END_HOUR; h += HALF_HOUR_INCREMENT) {
+    slots.push(h);
+  }
+  return slots;
 }
 
 // ─── EPG Guide ────────────────────────────────────────────────
-export function EPGGuide({ onBack }: { onBack?: () => void }) {
+export function EPGGuide({ onBack, onTuneChannel }: { onBack?: () => void; onTuneChannel?: (channel: Channel) => void }) {
   const [sidebarState, setSidebarState] = useState<0 | 1 | 2>(0);
   const [focusedChannelIdx, setFocusedChannelIdx] = useState(0);
   const [focusedCategoryIdx, setFocusedCategoryIdx] = useState(0);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(() => new Set(["cat-fav"]));
   const [focusedNavIdx, setFocusedNavIdx] = useState(1);
   const [currentTime, setCurrentTime] = useState(new Date());
 
   const channelListRef = useRef<HTMLDivElement>(null);
   const programGridRef = useRef<HTMLDivElement>(null);
+
+  const timeSlots = useMemo(() => getTimeSlots(), []);
+  const totalGridWidth = (TIMELINE_END_HOUR - TIMELINE_START_HOUR + HALF_HOUR_INCREMENT) * HOUR_WIDTH;
 
   const currentCategory = MOCK_CATEGORIES[focusedCategoryIdx] || MOCK_CATEGORIES[0];
   const visibleChannels = useMemo(
@@ -144,6 +178,7 @@ export function EPGGuide({ onBack }: { onBack?: () => void }) {
     return () => clearInterval(interval);
   }, []);
 
+  // D-pad navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (sidebarState === 0) {
@@ -152,13 +187,16 @@ export function EPGGuide({ onBack }: { onBack?: () => void }) {
           setSidebarState(1);
         } else if (e.key === "ArrowRight") {
           e.preventDefault();
-          if (programGridRef.current) programGridRef.current.scrollLeft += 200;
+          if (programGridRef.current) programGridRef.current.scrollLeft += HALF_HOUR_WIDTH;
         } else if (e.key === "ArrowUp") {
           e.preventDefault();
           setFocusedChannelIdx((i) => Math.max(0, i - 1));
         } else if (e.key === "ArrowDown") {
           e.preventDefault();
           setFocusedChannelIdx((i) => Math.min(visibleChannels.length - 1, i + 1));
+        } else if (e.key === "Enter") {
+          e.preventDefault();
+          if (highlightedChannel) onTuneChannel?.(highlightedChannel);
         }
       } else if (sidebarState === 1) {
         if (e.key === "ArrowLeft") {
@@ -203,6 +241,7 @@ export function EPGGuide({ onBack }: { onBack?: () => void }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [sidebarState, visibleChannels.length, onBack]);
 
+  // Auto-scroll focused channel into view
   useEffect(() => {
     if (channelListRef.current) {
       const row = channelListRef.current.children[focusedChannelIdx] as HTMLElement;
@@ -210,11 +249,15 @@ export function EPGGuide({ onBack }: { onBack?: () => void }) {
     }
   }, [focusedChannelIdx]);
 
+  // Auto-scroll to current time (aligned to nearest half-hour)
   useEffect(() => {
     if (programGridRef.current) {
       const currentHour = currentTime.getHours() + currentTime.getMinutes() / 60;
-      const scrollPos = (currentHour - TIMELINE_START_HOUR) * HOUR_WIDTH - 100;
-      programGridRef.current.scrollLeft = Math.max(0, scrollPos);
+      // Align to nearest half-hour slot
+      const alignedHour = Math.floor(currentHour * 2) / 2;
+      const slotIndex = (alignedHour - TIMELINE_START_HOUR) / HALF_HOUR_INCREMENT;
+      const scrollPos = Math.max(0, Math.floor(slotIndex) * HALF_HOUR_WIDTH);
+      programGridRef.current.scrollLeft = scrollPos;
     }
   }, []);
 
@@ -267,65 +310,117 @@ export function EPGGuide({ onBack }: { onBack?: () => void }) {
               <Icon name="chevronUp" className="w-4 h-4 flex-shrink-0" />
             </button>
           )}
-          {MOCK_CATEGORIES.map((cat, idx) => (
-            <button
-              key={cat.id}
-              className={cn(
-                "w-full text-left transition-colors focusable text-sm truncate",
-                sidebarState === 2 ? "px-6 py-1.5" : "px-2 py-1.5 text-center",
-                idx === focusedCategoryIdx ? "bg-blue-600/25 text-white" : "text-zinc-400 hover:text-white hover:bg-[#1a2040]"
-              )}
-            >
-              {sidebarState === 2 ? cat.name : ""}
-            </button>
-          ))}
+          {MOCK_CATEGORIES.map((cat, idx) => {
+            const isExpanded = expandedCategories.has(cat.id);
+            return (
+              <div key={cat.id}>
+                <button
+                  className={cn(
+                    "w-full flex items-center transition-colors focusable text-sm",
+                    sidebarState === 2 ? "px-6 py-1.5" : "px-2 py-1.5 justify-center",
+                    idx === focusedCategoryIdx ? "bg-blue-600/25 text-white" : "text-zinc-400 hover:text-white hover:bg-[#1a2040]"
+                  )}
+                  onClick={() => {
+                    if (sidebarState >= 1) {
+                      setExpandedCategories((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(cat.id)) next.delete(cat.id);
+                        else next.add(cat.id);
+                        return next;
+                      });
+                    }
+                  }}
+                >
+                  {sidebarState === 2 ? (
+                    <>
+                      <span className="truncate flex-1">{cat.name}</span>
+                      <Icon name={isExpanded ? "chevronUp" : "chevronDown"} className="w-4 h-4 flex-shrink-0 ml-1" />
+                    </>
+                  ) : (
+                    <Icon name="tv" className="w-5 h-5" />
+                  )}
+                </button>
+                {sidebarState === 2 && isExpanded && (
+                  <div className="ml-6 border-l border-[#1a2040]">
+                    {cat.channelIds.map((chId) => {
+                      const ch = MOCK_CHANNELS.find((c) => c.id === chId);
+                      if (!ch) return null;
+                      return (
+                        <button
+                          key={chId}
+                          className="w-full text-left px-3 py-1 text-xs text-zinc-500 hover:text-white hover:bg-[#1a2040] focusable truncate"
+                          onClick={() => {
+                            setFocusedCategoryIdx(idx);
+                            const chIdx = visibleChannels.findIndex((c) => c.id === chId);
+                            if (chIdx >= 0) setFocusedChannelIdx(chIdx);
+                          }}
+                        >
+                          {ch.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
       {/* ─── Main Content ────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Now Playing Bar */}
-        <div className="flex-shrink-0 px-4 py-2 border-b border-[#1a2040]" style={{ height: HEADER_HEIGHT }}>
-          <div className="flex gap-4 h-full items-start">
-            <div className="w-40 h-20 bg-[#1a2040] rounded-lg overflow-hidden flex-shrink-0">
+        {/* Now Playing Bar - Large header */}
+        <div className="flex-shrink-0 px-5 py-4 border-b border-[#1a2040]" style={{ height: NOW_PLAYING_HEIGHT }}>
+          <div className="flex gap-5 h-full items-start">
+            {/* Program thumbnail - larger */}
+            <div className="w-48 h-28 bg-[#1a2040] rounded-lg overflow-hidden flex-shrink-0 relative">
               {highlightedProgram?.thumbnail ? (
                 <img src={highlightedProgram.thumbnail} alt="" className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full bg-gradient-to-br from-[#1a2040] to-[#0d1224] flex items-center justify-center">
-                  <Icon name="tv" className="w-10 h-10 text-zinc-600" />
+                <div className="w-full h-full bg-gradient-to-br from-[#1e2a4a] to-[#0d1224] flex items-center justify-center">
+                  <Icon name="tv" className="w-14 h-14 text-zinc-600" />
+                </div>
+              )}
+              {/* Channel logo overlay */}
+              {highlightedChannel && (
+                <div className="absolute bottom-1 right-1 w-6 h-6 bg-[#0d1224]/80 rounded flex items-center justify-center text-[8px] font-bold text-zinc-300">
+                  {highlightedChannel.logo}
                 </div>
               )}
             </div>
 
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-lg font-semibold text-white truncate">
-                    {highlightedProgram?.title || "No program"}
-                  </h2>
-                  {highlightedProgram && (
-                    <div className="flex items-center gap-2 mt-0.5 text-sm text-zinc-400">
-                      <span>{formatTime(highlightedProgram.startHour)} – {formatTime(highlightedProgram.startHour + highlightedProgram.durationHours)}</span>
-                      <span className="text-zinc-600">—</span>
-                      <span>{Math.max(0, Math.round(((highlightedProgram.startHour + highlightedProgram.durationHours - currentHour) * 60)))} min left</span>
-                    </div>
-                  )}
-                </div>
+            {/* Program info - takes remaining space */}
+            <div className="flex-1 min-w-0 flex flex-col justify-between h-full">
+              <div>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <h2 className="text-xl font-semibold text-white truncate mb-1">
+                      {highlightedProgram?.title || "No program"}
+                    </h2>
+                    {highlightedProgram && (
+                      <div className="flex items-center gap-3 text-sm text-zinc-400">
+                        <span>{formatTime(highlightedProgram.startHour)} – {formatTime(highlightedProgram.startHour + highlightedProgram.durationHours)}</span>
+                        <span className="w-6 h-0.5 bg-zinc-600" />
+                        <span>{Math.max(0, Math.round(((highlightedProgram.startHour + highlightedProgram.durationHours - currentHour) * 60)))} min left</span>
+                      </div>
+                    )}
+                  </div>
 
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <button className="text-zinc-500 hover:text-yellow-400 transition-colors focusable p-1 rounded">
-                    <Icon name="star" className="w-5 h-5" />
-                  </button>
-                  <div className="text-right">
-                    <p className="text-sm text-white font-medium">{MOCK_PROVIDER_NAME}</p>
-                    <p className="text-xs text-zinc-500">{currentCategory.name}</p>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <button className="text-zinc-500 hover:text-yellow-400 transition-colors focusable p-1">
+                      <Icon name="starOutline" className="w-6 h-6" />
+                    </button>
+                    <div className="text-right">
+                      <p className="text-sm text-white font-medium">{MOCK_PROVIDER_NAME}</p>
+                      <p className="text-xs text-zinc-500">{currentCategory.name}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <p className="text-xs text-zinc-500 mt-1 line-clamp-2 max-w-xl">
-                {highlightedProgram?.description || "No description available."}
-              </p>
+                <p className="text-sm text-zinc-400 mt-2 line-clamp-2 max-w-2xl">
+                  {highlightedProgram?.description || "No description available."}
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -338,12 +433,12 @@ export function EPGGuide({ onBack }: { onBack?: () => void }) {
             className="flex-shrink-0 overflow-y-auto bg-[#0d1224] border-r border-[#1a2040]"
             style={{ width: CHANNEL_LIST_WIDTH }}
           >
-            {/* Header spacer - shows current date/time */}
+            {/* Header - date/time aligned with channel column */}
             <div
-              className="h-8 flex items-center px-2 text-xs text-blue-400 font-medium bg-[#0d1224] border-b border-[#1a2040] sticky top-0 z-20"
+              className="h-8 flex items-center px-3 text-xs text-blue-400 font-medium bg-[#0d1224] border-b border-[#1a2040] sticky top-0 z-20"
               style={{ width: CHANNEL_LIST_WIDTH }}
             >
-              {formatDateTime(currentTime).split(",")[0]}
+              {formatDateTime(currentTime).split(",").slice(0, 2).join(",")}
             </div>
 
             {visibleChannels.map((channel, idx) => (
@@ -359,7 +454,7 @@ export function EPGGuide({ onBack }: { onBack?: () => void }) {
                 <span className="text-xs text-zinc-500 w-4 text-right flex-shrink-0 tabular-nums">
                   {channel.number}
                 </span>
-                <div className="w-6 h-6 bg-[#1a2040] rounded flex items-center justify-center flex-shrink-0 text-[9px] font-bold text-zinc-400">
+                <div className="w-5 h-5 bg-[#1a2040] rounded flex items-center justify-center flex-shrink-0 text-[8px] font-bold text-zinc-400">
                   {channel.logo}
                 </div>
                 <span className="text-xs text-white truncate leading-tight">{channel.name}</span>
@@ -369,27 +464,31 @@ export function EPGGuide({ onBack }: { onBack?: () => void }) {
 
           {/* Program Grid + Timeline Header */}
           <div ref={programGridRef} className="flex-1 overflow-auto relative">
-            {/* Full-width wrapper for proper scroll */}
-            <div style={{ width: (TIMELINE_END_HOUR - TIMELINE_START_HOUR + 1) * HOUR_WIDTH }}>
-              {/* Timeline Header */}
-              <div className="h-8 bg-[#0d1224] border-b border-[#1a2040] sticky top-0 z-10 relative" style={{ width: (TIMELINE_END_HOUR - TIMELINE_START_HOUR + 1) * HOUR_WIDTH }}>
-                {Array.from({ length: TIMELINE_END_HOUR - TIMELINE_START_HOUR + 1 }, (_, i) => TIMELINE_START_HOUR + i).map((hour) => (
+            <div style={{ width: totalGridWidth }}>
+              {/* Timeline Header - separate row above grid */}
+              <div className="h-8 bg-[#0d1224] border-b border-[#1a2040] sticky top-0 z-10 relative" style={{ width: totalGridWidth }}>
+                {timeSlots.map((hour, idx) => (
                   <div
                     key={hour}
-                    className="absolute top-0 h-8 text-xs text-zinc-500 flex items-center border-l border-[#1a2040]"
-                    style={{ left: (hour - TIMELINE_START_HOUR) * HOUR_WIDTH, width: HOUR_WIDTH }}
+                    className={cn(
+                      "absolute top-0 h-8 text-xs flex items-center",
+                      idx % 2 === 0 ? "text-zinc-400 border-l border-[#1a2040]" : "text-zinc-600"
+                    )}
+                    style={{ left: idx * HALF_HOUR_WIDTH, width: HALF_HOUR_WIDTH }}
                   >
-                    <span className="pl-2 font-medium tabular-nums whitespace-nowrap">{formatTimeSlot(hour)}</span>
+                    <span className="pl-1.5 font-medium tabular-nums whitespace-nowrap">
+                      {formatTimeSlot(hour)}
+                    </span>
                   </div>
                 ))}
               </div>
 
-              {/* Now time indicator */}
+              {/* Now time indicator - spans entire height */}
               <div
-                className="absolute top-8 bottom-0 w-0.5 bg-blue-500 z-30 pointer-events-none"
+                className="absolute top-0 bottom-0 w-0.5 bg-blue-500 z-30 pointer-events-none"
                 style={{ left: nowPositionPx }}
               >
-                <div className="w-2 h-2 bg-blue-500 rounded-full -ml-[3px] -mt-1 absolute top-0" />
+                <div className="w-2 h-2 bg-blue-500 rounded-full -ml-[3px] absolute -top-1" />
               </div>
 
               {/* Program rows */}
@@ -406,19 +505,20 @@ export function EPGGuide({ onBack }: { onBack?: () => void }) {
                   >
                     {programs.map((program) => {
                       if (!program || program.startHour == null || program.durationHours == null) return null;
-                      const startOffset = (program.startHour - TIMELINE_START_HOUR) * HOUR_WIDTH;
+                      const slotIndex = (program.startHour - TIMELINE_START_HOUR) / HALF_HOUR_INCREMENT;
+                      const startOffset = slotIndex * HALF_HOUR_WIDTH;
                       const duration = program.durationHours * HOUR_WIDTH;
 
                       return (
                         <button
                           key={program.id}
                           className={cn(
-                            "absolute h-[42px] top-[3px] rounded px-2 flex items-center transition-all focusable text-left overflow-hidden border border-transparent",
+                            "absolute h-[36px] top-[3px] rounded px-2 flex items-center transition-all focusable text-left overflow-hidden border border-transparent",
                             highlightedProgram?.id === program.id
                               ? "bg-blue-600/30 border-blue-500/40 text-white"
                               : "bg-[#151b30] text-zinc-300 hover:bg-[#1e2642]"
                           )}
-                          style={{ left: startOffset, width: Math.max(duration - 4, 30) }}
+                          style={{ left: startOffset, width: Math.max(duration - 4, 28) }}
                           onClick={() => setFocusedChannelIdx(channelIdx)}
                         >
                           <span className="text-xs truncate">{program.title}</span>
