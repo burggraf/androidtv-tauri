@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start Android TV emulator + build/install/launch app
+# Start Android TV emulator + dev server with hot reload
 # Usage: ./scripts/emulator-app-start.sh [--headed]
 
 set -e
@@ -7,8 +7,6 @@ set -e
 AVD_NAME="Android_TV_API34"
 SDK_ROOT="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 EMULATOR="$SDK_ROOT/emulator/emulator"
-APP_PACKAGE="com.markb.tauri_app"
-APP_ACTIVITY=".MainActivity"
 
 HEADED=false
 case "$1" in
@@ -40,27 +38,24 @@ echo "Waiting for emulator boot..."
 adb wait-for-device shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done'
 echo "Emulator ready!"
 
-# Set up port forwarding for Vite
+# Set up port forwarding for Vite HMR
 echo "Setting up port forwarding..."
 adb reverse --remove-all 2>/dev/null || true
 adb reverse tcp:1420 tcp:1420
 adb reverse tcp:1421 tcp:1421
 
-# Build and install
-echo "Building and installing app..."
-cd "$(dirname "$0")/../src-tauri/gen/android"
-./gradlew :app:assembleDebug :app:installDebug 2>&1 | tail -5
-
-# Launch app
-echo "Launching app..."
-adb shell am force-stop "$APP_PACKAGE" 2>/dev/null || true
-sleep 1
-adb shell am start -n "$APP_PACKAGE/$APP_ACTIVITY"
-
+# Run Tauri dev loop (starts Vite + builds + installs + launches + hot reload)
 echo ""
-echo "✅ App launched on emulator!"
-echo "   Package: $APP_PACKAGE"
-echo "   Vite dev server should be running on localhost:1420"
+echo "Starting dev server with hot reload..."
+echo "   Save a file → app updates automatically"
+echo "   Press Ctrl+C to stop everything"
 echo ""
-echo "Keep this terminal open. Press Ctrl+C to stop emulator."
+
+cd "$(dirname "$0")/.."
+pnpm tauri android dev
+
+# If dev loop exits, stop emulator too
+echo ""
+echo "Dev server stopped. Shutting down emulator..."
+adb -s emulator-5554 emu kill 2>/dev/null || true
 wait $EMULATOR_PID 2>/dev/null || true
