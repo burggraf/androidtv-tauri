@@ -31,9 +31,9 @@ import {
 // ── Constants ────────────────────────────────────────────────
 const SIDEBAR_FULL_WIDTH = 260;
 const SIDEBAR_COLLAPSED_WIDTH = 60;
-const NOW_PLAYING_HEIGHT = 180;
+const NOW_PLAYING_HEIGHT = 240;
 const TIMELINE_HEADER_HEIGHT = 28;
-const CHANNEL_ROW_HEIGHT = 42;
+// Channel rows will be calculated to fill remaining space
 const HOUR_WIDTH = 260;
 const HALF_HOUR_WIDTH = HOUR_WIDTH / 2;
 const CHANNEL_LIST_WIDTH = 200;
@@ -370,37 +370,37 @@ export function EPGGuide({ onBack, onTuneChannel }: { onBack?: () => void; onTun
       {/* ─── Main Content ────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Now Playing Bar - Large header */}
-        <div className="flex-shrink-0 px-5 py-4 border-b border-[#1a2040]" style={{ height: NOW_PLAYING_HEIGHT }}>
+        <div className="flex-shrink-0 px-6 py-5 border-b border-[#1a2040]" style={{ height: NOW_PLAYING_HEIGHT }}>
           <div className="flex gap-5 h-full items-start">
             {/* Program thumbnail - larger */}
-            <div className="w-48 h-28 bg-[#1a2040] rounded-lg overflow-hidden flex-shrink-0 relative">
+            <div className="w-56 h-32 bg-[#1a2040] rounded-xl overflow-hidden flex-shrink-0 relative shadow-lg">
               {highlightedProgram?.thumbnail ? (
                 <img src={highlightedProgram.thumbnail} alt="" className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full bg-gradient-to-br from-[#1e2a4a] to-[#0d1224] flex items-center justify-center">
-                  <Icon name="tv" className="w-14 h-14 text-zinc-600" />
+                  <Icon name="tv" className="w-16 h-16 text-zinc-600" />
                 </div>
               )}
               {/* Channel logo overlay */}
               {highlightedChannel && (
-                <div className="absolute bottom-1 right-1 w-6 h-6 bg-[#0d1224]/80 rounded flex items-center justify-center text-[8px] font-bold text-zinc-300">
+                <div className="absolute bottom-2 right-2 w-7 h-7 bg-[#0d1224]/90 rounded-md flex items-center justify-center text-[9px] font-bold text-zinc-300">
                   {highlightedChannel.logo}
                 </div>
               )}
             </div>
 
             {/* Program info - takes remaining space */}
-            <div className="flex-1 min-w-0 flex flex-col justify-between h-full">
+            <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
               <div>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
-                    <h2 className="text-xl font-semibold text-white truncate mb-1">
+                    <h2 className="text-2xl font-semibold text-white truncate mb-2">
                       {highlightedProgram?.title || "No program"}
                     </h2>
                     {highlightedProgram && (
-                      <div className="flex items-center gap-3 text-sm text-zinc-400">
+                      <div className="flex items-center gap-4 text-base text-zinc-400">
                         <span>{formatTime(highlightedProgram.startHour)} – {formatTime(highlightedProgram.startHour + highlightedProgram.durationHours)}</span>
-                        <span className="w-6 h-0.5 bg-zinc-600" />
+                        <span className="w-8 h-0.5 bg-zinc-600" />
                         <span>{Math.max(0, Math.round(((highlightedProgram.startHour + highlightedProgram.durationHours - currentHour) * 60)))} min left</span>
                       </div>
                     )}
@@ -417,7 +417,7 @@ export function EPGGuide({ onBack, onTuneChannel }: { onBack?: () => void; onTun
                   </div>
                 </div>
 
-                <p className="text-sm text-zinc-400 mt-2 line-clamp-2 max-w-2xl">
+                <p className="text-base text-zinc-400 mt-3 line-clamp-2 max-w-3xl">
                   {highlightedProgram?.description || "No description available."}
                 </p>
               </div>
@@ -426,11 +426,11 @@ export function EPGGuide({ onBack, onTuneChannel }: { onBack?: () => void; onTun
         </div>
 
         {/* ── EPG Grid ──────────────────────────────────── */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex overflow-hidden min-h-0">
           {/* Channel List */}
           <div
             ref={channelListRef}
-            className="flex-shrink-0 overflow-y-auto bg-[#0d1224] border-r border-[#1a2040]"
+            className="flex-shrink-0 bg-[#0d1224] border-r border-[#1a2040]"
             style={{ width: CHANNEL_LIST_WIDTH }}
           >
             {/* Header - date/time aligned with channel column */}
@@ -441,14 +441,15 @@ export function EPGGuide({ onBack, onTuneChannel }: { onBack?: () => void; onTun
               {formatDateTime(currentTime).split(",").slice(0, 2).join(",")}
             </div>
 
-            {visibleChannels.map((channel, idx) => (
-              <div
+            {/* Channel rows - flex container fills remaining height */}
+            <div className="flex flex-col overflow-y-auto" style={{ height: `calc(100vh - ${NOW_PLAYING_HEIGHT}px - ${TIMELINE_HEADER_HEIGHT}px - 32px)` }}>
+              {visibleChannels.map((channel, idx) => (
+                <div
                 key={channel.id}
                 className={cn(
-                  "flex items-center gap-2 px-3 transition-colors cursor-pointer focusable",
+                  "flex items-center gap-2 px-3 transition-colors cursor-pointer focusable flex-1 min-h-0",
                   idx === focusedChannelIdx ? "bg-blue-600/15" : "hover:bg-[#1a2040]"
                 )}
-                style={{ height: CHANNEL_ROW_HEIGHT }}
                 onClick={() => setFocusedChannelIdx(idx)}
               >
                 <span className="text-xs text-zinc-500 w-4 text-right flex-shrink-0 tabular-nums">
@@ -460,6 +461,7 @@ export function EPGGuide({ onBack, onTuneChannel }: { onBack?: () => void; onTun
                 <span className="text-xs text-white truncate leading-tight">{channel.name}</span>
               </div>
             ))}
+            </div>
           </div>
 
           {/* Program Grid + Timeline Header */}
@@ -491,43 +493,44 @@ export function EPGGuide({ onBack, onTuneChannel }: { onBack?: () => void; onTun
                 <div className="w-2 h-2 bg-blue-500 rounded-full -ml-[3px] absolute -top-1" />
               </div>
 
-              {/* Program rows */}
-              {visibleChannels.map((channel, channelIdx) => {
-                const programs = getProgramsForChannel(channel.id);
-                return (
-                  <div
-                    key={channel.id}
-                    className={cn(
-                      "border-b border-[#1a2040] relative",
-                      channelIdx === focusedChannelIdx && "bg-blue-600/5"
-                    )}
-                    style={{ height: CHANNEL_ROW_HEIGHT }}
-                  >
-                    {programs.map((program) => {
-                      if (!program || program.startHour == null || program.durationHours == null) return null;
-                      const slotIndex = (program.startHour - TIMELINE_START_HOUR) / HALF_HOUR_INCREMENT;
-                      const startOffset = slotIndex * HALF_HOUR_WIDTH;
-                      const duration = program.durationHours * HOUR_WIDTH;
+              {/* Program rows - flex container fills remaining height */}
+              <div className="flex flex-col" style={{ height: `calc(100vh - ${NOW_PLAYING_HEIGHT}px - ${TIMELINE_HEADER_HEIGHT}px)` }}>
+                {visibleChannels.map((channel, channelIdx) => {
+                  const programs = getProgramsForChannel(channel.id);
+                  return (
+                    <div
+                      key={channel.id}
+                      className={cn(
+                        "border-b border-[#1a2040] relative flex-1 min-h-0",
+                        channelIdx === focusedChannelIdx && "bg-blue-600/5"
+                      )}
+                    >
+                      {programs.map((program) => {
+                        if (!program || program.startHour == null || program.durationHours == null) return null;
+                        const slotIndex = (program.startHour - TIMELINE_START_HOUR) / HALF_HOUR_INCREMENT;
+                        const startOffset = slotIndex * HALF_HOUR_WIDTH;
+                        const duration = program.durationHours * HOUR_WIDTH;
 
-                      return (
-                        <button
-                          key={program.id}
-                          className={cn(
-                            "absolute h-[36px] top-[3px] rounded px-2 flex items-center transition-all focusable text-left overflow-hidden border border-transparent",
-                            highlightedProgram?.id === program.id
-                              ? "bg-blue-600/30 border-blue-500/40 text-white"
-                              : "bg-[#151b30] text-zinc-300 hover:bg-[#1e2642]"
-                          )}
-                          style={{ left: startOffset, width: Math.max(duration - 4, 28) }}
-                          onClick={() => setFocusedChannelIdx(channelIdx)}
-                        >
-                          <span className="text-xs truncate">{program.title}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                );
-              })}
+                        return (
+                          <button
+                            key={program.id}
+                            className={cn(
+                              "absolute rounded px-2 flex items-center transition-all focusable text-left overflow-hidden border border-transparent",
+                              highlightedProgram?.id === program.id
+                                ? "bg-blue-600/30 border-blue-500/40 text-white"
+                                : "bg-[#151b30] text-zinc-300 hover:bg-[#1e2642]"
+                            )}
+                            style={{ left: startOffset, width: Math.max(duration - 4, 28), top: '10%', height: '80%' }}
+                            onClick={() => setFocusedChannelIdx(channelIdx)}
+                          >
+                            <span className="text-sm truncate">{program.title}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
