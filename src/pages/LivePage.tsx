@@ -145,7 +145,10 @@ export function LivePage({ onBack }: { onBack: () => void }) {
           showControls ? "opacity-100" : "opacity-0 pointer-events-none"
         }`}
       >
-        <span className="text-white text-lg font-semibold">📡 {TEST_CHANNEL.name}</span>
+        <div className="flex items-center gap-2">
+          <img src="/azabab-logo-icon.png" alt="" width="32" height="32" className="opacity-90" />
+          <span className="text-white text-lg font-semibold">{TEST_CHANNEL.name}</span>
+        </div>
         <Button
           ref={(el) => {
             if (showControls) el?.focus();
