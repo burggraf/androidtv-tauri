@@ -30,7 +30,7 @@ import {
 
 // ── Constants ────────────────────────────────────────────────
 const SIDEBAR_FULL_WIDTH = 260;
-const SIDEBAR_COLLAPSED_WIDTH = 60;
+const SIDEBAR_COLLAPSED_WIDTH = 200;
 const NOW_PLAYING_HEIGHT = 240;
 const TIMELINE_HEADER_HEIGHT = 28;
 // Channel rows will be calculated to fill remaining space
@@ -144,7 +144,6 @@ export function EPGGuide({ onBack, onTuneChannel }: { onBack?: () => void; onTun
   const [sidebarState, setSidebarState] = useState<0 | 1 | 2>(0);
   const [focusedChannelIdx, setFocusedChannelIdx] = useState(0);
   const [focusedCategoryIdx, setFocusedCategoryIdx] = useState(0);
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(() => new Set(["cat-fav"]));
   const [focusedNavIdx, setFocusedNavIdx] = useState(1);
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -207,10 +206,18 @@ export function EPGGuide({ onBack, onTuneChannel }: { onBack?: () => void; onTun
           setSidebarState(0);
         } else if (e.key === "ArrowUp") {
           e.preventDefault();
-          setFocusedChannelIdx((i) => Math.max(0, i - 1));
+          setFocusedCategoryIdx((i) => Math.max(0, i - 1));
         } else if (e.key === "ArrowDown") {
           e.preventDefault();
-          setFocusedChannelIdx((i) => Math.min(visibleChannels.length - 1, i + 1));
+          setFocusedCategoryIdx((i) => Math.min(MOCK_CATEGORIES.length - 1, i + 1));
+        } else if (e.key === "Enter") {
+          e.preventDefault();
+          const cat = MOCK_CATEGORIES[focusedCategoryIdx];
+          if (cat && cat.channelIds.length > 0) {
+            const chIdx = visibleChannels.findIndex((c) => c.id === cat.channelIds[0]);
+            if (chIdx >= 0) setFocusedChannelIdx(chIdx);
+            setSidebarState(0);
+          }
         }
       } else {
         if (e.key === "ArrowRight") {
@@ -239,7 +246,7 @@ export function EPGGuide({ onBack, onTuneChannel }: { onBack?: () => void; onTun
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [sidebarState, visibleChannels.length, onBack]);
+  }, [sidebarState, visibleChannels.length, focusedCategoryIdx, onBack, highlightedChannel, onTuneChannel]);
 
   // Auto-scroll focused channel into view
   useEffect(() => {
@@ -270,101 +277,88 @@ export function EPGGuide({ onBack, onTuneChannel }: { onBack?: () => void; onTun
       {/* ─── Sidebar ────────────────────────────────────── */}
       <div
         className={cn(
-          "flex-shrink-0 h-full bg-[#0d1224] border-r border-[#1a2040] transition-all duration-200 ease-out flex flex-col overflow-hidden",
+          "flex-shrink-0 h-full bg-[#0d1224] border-r border-[#1a2040] transition-all duration-200 ease-out overflow-hidden",
           sidebarState === 0 && "w-0 border-none"
         )}
         style={{ width: sidebarState === 0 ? 0 : sidebarWidth }}
       >
-        <div className="flex items-center justify-center py-3 border-b border-[#1a2040] flex-shrink-0">
-          {sidebarState === 2 ? (
-            <span className="text-lg font-bold tracking-tight">
-              <span className="text-blue-500">tivi</span>
-              <span className="text-white">mate</span>
-            </span>
-          ) : (
-            <span className="text-blue-500 font-bold text-base">tv</span>
-          )}
-        </div>
-
-        {sidebarState === 2 && (
-          <div className="py-1 flex-shrink-0">
-            {NAV_ITEMS.map((item, idx) => (
-              <button
-                key={item.id}
-                className={cn(
-                  "w-full flex items-center gap-3 px-4 py-2 text-sm transition-colors focusable",
-                  idx === focusedNavIdx ? "bg-blue-600/30 text-white" : "text-zinc-400 hover:text-white hover:bg-[#1a2040]"
-                )}
-              >
-                <Icon name={item.icon} className="w-5 h-5 flex-shrink-0" />
-                <span className="truncate">{item.label}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="flex-1 overflow-y-auto py-1 border-t border-[#1a2040]">
-          {sidebarState === 2 && (
-            <button className="w-full flex items-center justify-between px-4 py-2 text-sm font-semibold text-white hover:bg-[#1a2040] focusable">
-              <span className="truncate">{MOCK_PROVIDER_NAME}</span>
-              <Icon name="chevronUp" className="w-4 h-4 flex-shrink-0" />
-            </button>
-          )}
-          {MOCK_CATEGORIES.map((cat, idx) => {
-            const isExpanded = expandedCategories.has(cat.id);
-            return (
-              <div key={cat.id}>
+        {sidebarState === 2 ? (
+          /* Full sidebar: logo + nav + categories stacked vertically */
+          <div className="flex flex-col h-full">
+            <div className="flex items-center justify-center py-3 border-b border-[#1a2040] flex-shrink-0">
+              <span className="text-lg font-bold tracking-tight">
+                <span className="text-blue-500">tivi</span>
+                <span className="text-white">mate</span>
+              </span>
+            </div>
+            <div className="py-1 flex-shrink-0">
+              {NAV_ITEMS.map((item, idx) => (
                 <button
+                  key={item.id}
                   className={cn(
-                    "w-full flex items-center transition-colors focusable text-sm",
-                    sidebarState === 2 ? "px-6 py-1.5" : "px-2 py-1.5 justify-center",
+                    "w-full flex items-center gap-3 px-4 py-2 text-sm transition-colors focusable",
+                    idx === focusedNavIdx ? "bg-blue-600/30 text-white" : "text-zinc-400 hover:text-white hover:bg-[#1a2040]"
+                  )}
+                >
+                  <Icon name={item.icon} className="w-5 h-5 flex-shrink-0" />
+                  <span className="truncate">{item.label}</span>
+                </button>
+              ))}
+            </div>
+            <div className="flex-1 overflow-y-auto py-1 border-t border-[#1a2040]">
+              <div className="px-4 py-2 text-sm font-semibold text-white">
+                {MOCK_PROVIDER_NAME}
+              </div>
+              {MOCK_CATEGORIES.map((cat, idx) => (
+                <button
+                  key={cat.id}
+                  className={cn(
+                    "w-full text-left px-6 py-1.5 transition-colors focusable text-sm",
                     idx === focusedCategoryIdx ? "bg-blue-600/25 text-white" : "text-zinc-400 hover:text-white hover:bg-[#1a2040]"
                   )}
-                  onClick={() => {
-                    if (sidebarState >= 1) {
-                      setExpandedCategories((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(cat.id)) next.delete(cat.id);
-                        else next.add(cat.id);
-                        return next;
-                      });
-                    }
-                  }}
                 >
-                  {sidebarState === 2 ? (
-                    <>
-                      <span className="truncate flex-1">{cat.name}</span>
-                      <Icon name={isExpanded ? "chevronUp" : "chevronDown"} className="w-4 h-4 flex-shrink-0 ml-1" />
-                    </>
-                  ) : (
-                    <Icon name="tv" className="w-5 h-5" />
-                  )}
+                  {cat.name}
                 </button>
-                {sidebarState === 2 && isExpanded && (
-                  <div className="ml-6 border-l border-[#1a2040]">
-                    {cat.channelIds.map((chId) => {
-                      const ch = MOCK_CHANNELS.find((c) => c.id === chId);
-                      if (!ch) return null;
-                      return (
-                        <button
-                          key={chId}
-                          className="w-full text-left px-3 py-1 text-xs text-zinc-500 hover:text-white hover:bg-[#1a2040] focusable truncate"
-                          onClick={() => {
-                            setFocusedCategoryIdx(idx);
-                            const chIdx = visibleChannels.findIndex((c) => c.id === chId);
-                            if (chIdx >= 0) setFocusedChannelIdx(chIdx);
-                          }}
-                        >
-                          {ch.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+              ))}
+            </div>
+          </div>
+        ) : sidebarState === 1 ? (
+          /* Collapsed sidebar: icon rail on left, categories on right */
+          <div className="flex h-full">
+            {/* Icon rail */}
+            <div className="w-[52px] flex-shrink-0 flex flex-col items-center py-2 gap-1 border-r border-[#1a2040]">
+              <div className="w-8 h-8 flex items-center justify-center mb-2">
+                <Icon name="tv" className="w-5 h-5 text-blue-500" />
               </div>
-            );
-          })}
-        </div>
+              {NAV_ITEMS.map((item) => (
+                <button
+                  key={item.id}
+                  className="w-9 h-9 flex items-center justify-center rounded-lg text-zinc-500 hover:text-white hover:bg-[#1a2040] transition-colors focusable"
+                  title={item.label}
+                >
+                  <Icon name={item.icon} className="w-5 h-5" />
+                </button>
+              ))}
+            </div>
+            {/* Categories panel */}
+            <div className="flex-1 overflow-y-auto py-1">
+              <div className="px-3 py-2 text-sm font-semibold text-white">
+                {MOCK_PROVIDER_NAME}
+              </div>
+              {MOCK_CATEGORIES.map((cat, idx) => (
+                <button
+                  key={cat.id}
+                  className={cn(
+                    "w-full text-left px-3 py-1.5 transition-colors focusable text-sm",
+                    idx === focusedCategoryIdx ? "bg-blue-600/25 text-white" : "text-zinc-400 hover:text-white hover:bg-[#1a2040]"
+                  )}
+                >
+                  {cat.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* ─── Main Content ────────────────────────────────── */}
